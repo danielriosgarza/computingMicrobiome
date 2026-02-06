@@ -1,0 +1,37 @@
+I need to implement a "Level 2" Reservoir Computing benchmark: A **Serial Adder**.
+
+**Context:**
+I already have a cellular automata engine in `elementaryCA.py`.
+Previous benchmarks (like `k_compound_opcode_bm.py`) reset the reservoir state for every sample.
+This new task requires **Sequential Logic**: the reservoir must maintain a hidden "Carry Bit" state across multiple time steps to add two binary numbers correctly.
+
+**Goal:**
+Create three new files to implement and test an 8-bit Serial Adder.
+
+### 1. `k_serial_adder_bm.py` (Data Generation)
+Create a function `build_dataset_serial_adder` that generates training data for adding two N-bit integers.
+* **Inputs:** Two random N-bit integers ($A$ and $B$).
+* **Stream Logic:** Feed the bits of $A$ and $B$ starting from the **Least Significant Bit (LSB)** to the MSB.
+* **Reservoir Physics:**
+    * Initialize the ECA grid **once** at the start of the addition problem.
+    * **Do NOT reset** the grid between bits. The reservoir must "remember" the carry from Bit 0 to affect the result of Bit 1.
+    * Use `d_period` (distractor steps) between each bit injection to test memory stability.
+* **Channels:** Create distinct channels for `TAG_A`, `TAG_B`, `VAL`, `DISTRACTOR`, and `CUE`.
+* **Labels:** The target $y$ for step $i$ is the $i$-th bit of $(A + B)$.
+
+### 2. `k_serial_adder_classifier.py` (The Learner)
+Create a `KSerialAdder` class inheriting from `BaseEstimator, ClassifierMixin`.
+* It should wrap an `SVC(kernel='linear')` (or `RidgeClassifier` if faster).
+* **Crucial Change:** The `predict` method must handle a sequence. It should take two lists of integers (or strings of bits), run the simulation continuously for $N$ bits, and collect the readout at the specific CUE time for each bit position.
+
+### 3. `serial_adder_test.py` (Verification)
+Create a test script that:
+* Trains the model on 500 random 8-bit addition problems.
+* Tests on 100 *new* random 8-bit problems.
+* **Specific Edge Case:** Explicitly test the "Cascade Carry" case (e.g., `01111111 + 00000001 = 10000000`) where a single carry propagates through the whole chain.
+* Print the accuracy per bit position (Does accuracy drop for higher bits?).
+
+**Technical Constraints:**
+* Use `rule_number=110` (or a known complex rule).
+* Use the existing `eca_step` from `elementaryCA.py`.
+* Keep the coding style consistent with `k_compound_opcode_bm.py` (numpy type hints, clean architecture).

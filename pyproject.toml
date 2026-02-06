@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "computingMicrobiome"
+version = "0.1.0"
+description = "Elementary cellular automata reservoir computing benchmarks."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scikit-learn",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+gif = ["imageio"]
+
+[project.scripts]
+cm-toy-addition = "computingMicrobiome.cli:main_toy_addition"
+cm-make-figures = "computingMicrobiome.cli:main_make_figures"
+cm-opcode-test = "computingMicrobiome.cli:main_opcode_test"
+cm-opcode16-test = "computingMicrobiome.cli:main_opcode16_test"
+cm-compound-opcode-test = "computingMicrobiome.cli:main_compound_opcode_test"
+cm-serial-adder-test = "computingMicrobiome.cli:main_serial_adder_test"
+cm-kbit-memory-test = "computingMicrobiome.cli:main_kbit_memory_test"
+cm-kxor-visual = "computingMicrobiome.cli:main_kxor_visual"
+cm-rule110-gif = "computingMicrobiome.cli:main_rule110_gif"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
