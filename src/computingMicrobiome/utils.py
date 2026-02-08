@@ -1,3 +1,5 @@
+"""Shared utility helpers for bit encodings and input placement."""
+
 from __future__ import annotations
 
 from typing import List
@@ -6,9 +8,18 @@ import numpy as np
 
 
 def int_to_bits(i: int, n_bits: int) -> np.ndarray:
-    """
-    Return np.int8 array of length n_bits, MSB-first.
-    Example: 5 -> [1, 0, 1] for n_bits=3.
+    """Convert an integer to an MSB-first bit vector.
+
+    Args:
+        i: Integer value to convert.
+        n_bits: Number of bits in the output vector.
+
+    Returns:
+        np.ndarray: Bit vector of shape (n_bits,) with dtype int8.
+
+    Example:
+        >>> int_to_bits(5, 3).tolist()
+        [1, 0, 1]
     """
     if n_bits < 1:
         raise ValueError("n_bits must be >= 1")
@@ -17,7 +28,15 @@ def int_to_bits(i: int, n_bits: int) -> np.ndarray:
 
 
 def int_to_bits_lsb(i: int, n_bits: int) -> np.ndarray:
-    """Return np.int8 array of length n_bits, LSB-first."""
+    """Convert an integer to an LSB-first bit vector.
+
+    Args:
+        i: Integer value to convert.
+        n_bits: Number of bits in the output vector.
+
+    Returns:
+        np.ndarray: Bit vector of shape (n_bits,) with dtype int8.
+    """
     if n_bits < 1:
         raise ValueError("n_bits must be >= 1")
     bits = [(int(i) >> k) & 1 for k in range(n_bits)]
@@ -25,7 +44,14 @@ def int_to_bits_lsb(i: int, n_bits: int) -> np.ndarray:
 
 
 def bits_lsb_to_int(bits_lsb: np.ndarray) -> int:
-    """Convert LSB-first bit array to integer."""
+    """Convert an LSB-first bit vector to an integer.
+
+    Args:
+        bits_lsb: Bit vector of shape (n_bits,) in LSB-first order.
+
+    Returns:
+        int: Integer value represented by the bit vector.
+    """
     bits_lsb = np.asarray(bits_lsb, dtype=np.int8).reshape(-1)
     val = 0
     for k, b in enumerate(bits_lsb.tolist()):
@@ -34,7 +60,14 @@ def bits_lsb_to_int(bits_lsb: np.ndarray) -> int:
 
 
 def flatten_history(history_list_of_arrays: List[np.ndarray]) -> np.ndarray:
-    """Concatenate a list of 1D arrays into a flat feature vector."""
+    """Concatenate a list of 1D arrays into a flat feature vector.
+
+    Args:
+        history_list_of_arrays: List of 1D arrays with matching shapes.
+
+    Returns:
+        np.ndarray: Flattened 1D vector formed by concatenation.
+    """
     return np.concatenate(history_list_of_arrays, axis=0)
 
 
@@ -44,10 +77,19 @@ def create_input_locations(
     input_channels: int,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """
-    Sample injection sites, evenly partitioning width into segments.
+    """Sample injection sites across the automaton width.
 
-    Returns an array of length recurrence * input_channels.
+    The width is partitioned into `recurrence` segments and `input_channels`
+    positions are sampled without replacement in each segment.
+
+    Args:
+        width: Total number of cells.
+        recurrence: Number of segments to partition the width into.
+        input_channels: Number of channels to inject per segment.
+        rng: NumPy random generator for sampling.
+
+    Returns:
+        np.ndarray: Integer array of length `recurrence * input_channels`.
     """
     if width < recurrence:
         raise ValueError("width must be >= recurrence")

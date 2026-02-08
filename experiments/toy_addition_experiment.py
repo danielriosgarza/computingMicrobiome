@@ -1,12 +1,18 @@
+"""Toy addition experiment helpers."""
+
 from __future__ import annotations
 
 from typing import List, Sequence, Tuple
 
 import numpy as np
-from sklearn.svm import SVC
 
-from ..benchmarks.k_opcode_logic16_bm import apply_opcode, run_episode_record_tagged
-from ..utils import bits_lsb_to_int, create_input_locations, int_to_bits_lsb
+from computingMicrobiome.benchmarks.k_opcode_logic16_bm import (
+    apply_opcode,
+    run_episode_record_tagged,
+)
+from computingMicrobiome.readouts.base import Readout
+from computingMicrobiome.readouts.factory import make_readout
+from computingMicrobiome.utils import bits_lsb_to_int, create_input_locations, int_to_bits_lsb
 
 OP_XOR = np.array([0, 1, 1, 0], dtype=np.int8)
 OP_AND = np.array([1, 0, 0, 0], dtype=np.int8)
@@ -14,19 +20,44 @@ OP_OR = np.array([1, 1, 1, 0], dtype=np.int8)
 
 
 def int_to_bits(x: int, n: int) -> List[int]:
-    """LSB-first bits of length n."""
+    """Convert an integer to LSB-first bits.
+
+    Args:
+        x: Integer value to convert.
+        n: Number of bits to return.
+
+    Returns:
+        List[int]: LSB-first bits of length n.
+    """
     return int_to_bits_lsb(x, n).astype(int).tolist()
 
 
 def bits_to_int(bits: Sequence[int]) -> int:
-    """Convert LSB-first bits to integer."""
+    """Convert LSB-first bits to an integer.
+
+    Args:
+        bits: Sequence of bits in LSB-first order.
+
+    Returns:
+        int: Integer value.
+    """
     return bits_lsb_to_int(np.asarray(bits, dtype=np.int8))
 
 
 def enumerate_addition_dataset(
     n_bits: int, cin: int = 0
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Exhaustively enumerate addition dataset."""
+    """Enumerate the full addition dataset.
+
+    Args:
+        n_bits: Number of bits per operand.
+        cin: Carry-in bit (0 or 1).
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: Input matrix of shape
+        (2**(2*n_bits), 2*n_bits) and labels of shape
+        (2**(2*n_bits), n_bits + 1).
+    """
     if n_bits < 1:
         raise ValueError("n_bits must be >= 1")
     cin = int(cin) & 1
@@ -51,20 +82,45 @@ def enumerate_addition_dataset(
     return X_direct, Y
 
 
-def train_direct_linear_models(X_direct: np.ndarray, Y: np.ndarray) -> List[SVC]:
-    """Train one linear SVM per output bit."""
+def train_direct_linear_models(
+    X_direct: np.ndarray,
+    Y: np.ndarray,
+    *,
+    readout_kind: str = "svm",
+    readout_config: dict | None = None,
+    seed: int = 0,
+) -> List[Readout]:
+    """Train one linear readout per output bit.
+
+    Args:
+        X_direct: Direct input features of shape (n_samples, 2*n_bits).
+        Y: Output labels of shape (n_samples, n_bits + 1).
+
+    Returns:
+        List[Readout]: One classifier per output bit.
+    """
     X_direct = np.asarray(X_direct, dtype=np.int8)
     Y = np.asarray(Y, dtype=np.int8)
-    models: List[SVC] = []
+    models: List[Readout] = []
+    rng = np.random.default_rng(seed)
     for i in range(Y.shape[1]):
-        reg = SVC(kernel="linear")
+        reg = make_readout(readout_kind, readout_config, rng=rng)
         reg.fit(X_direct, Y[:, i])
         models.append(reg)
     return models
 
 
-def evaluate_models(models: List[SVC], X: np.ndarray, Y: np.ndarray) -> dict:
-    """Evaluate per-bit and full-vector accuracy."""
+def evaluate_models(models: List[Readout], X: np.ndarray, Y: np.ndarray) -> dict:
+    """Evaluate per-bit and full-vector accuracy.
+
+    Args:
+        models: List of trained classifiers (one per output bit).
+        X: Feature matrix of shape (n_samples, n_features).
+        Y: Labels of shape (n_samples, n_bits_out).
+
+    Returns:
+        dict: Metrics including per-bit accuracy and full-vector accuracy.
+    """
     X = np.asarray(X, dtype=np.int8)
     Y = np.asarray(Y, dtype=np.int8)
 
@@ -244,7 +300,27 @@ def full_adder_reservoir_features(
     feature_mode: str = "cue_tick",
     output_window: int = 2,
 ) -> Tuple[np.ndarray, np.ndarray, int, int]:
-    """Reservoir features and labels for a single full-adder step."""
+    """Reservoir features and labels for a single full-adder step.
+
+    Args:
+        a: Operand bit (0 or 1).
+        b: Operand bit (0 or 1).
+        cin: Carry-in bit (0 or 1).
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        itr: Number of iterations between ticks.
+        d_period: Delay period between input and recall.
+        recurrence: Number of input segments for injection.
+        repeats: Number of episode repeats.
+        seed: RNG seed.
+        feature_mode: Feature extraction mode ("cue_tick" or "window").
+        output_window: Output window length when using windowed features.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, int, int]: Feature vector, label vector,
+        sum bit, and carry bit.
+    """
     rng = np.random.default_rng(seed)
     input_locations = create_input_locations(width, recurrence, 10, rng)
 
@@ -274,7 +350,21 @@ def addition_reservoir_features(
     cin: int,
     **reservoir_params,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """N-bit ripple carry reservoir features (LSB-first)."""
+    """Compute reservoir features for N-bit ripple-carry addition.
+
+    Args:
+        x: First operand as integer.
+        y: Second operand as integer.
+        n_bits: Number of bits per operand.
+        cin: Carry-in bit (0 or 1).
+        **reservoir_params: Reservoir parameters such as rule_number, width,
+            boundary, recurrence, itr, d_period, repeats, seed, feature_mode,
+            and output_window.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: Feature vector and output bits
+        (sum bits plus carry).
+    """
     if n_bits < 1:
         raise ValueError("n_bits must be >= 1")
     cin = int(cin) & 1
@@ -331,7 +421,16 @@ def build_reservoir_dataset(
     cin: int,
     **reservoir_params,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Enumerate all x,y pairs and build reservoir features."""
+    """Enumerate all x,y pairs and build reservoir features.
+
+    Args:
+        n_bits: Number of bits per operand.
+        cin: Carry-in bit (0 or 1).
+        **reservoir_params: Reservoir parameters.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: Feature matrix and label matrix.
+    """
     if n_bits < 1:
         raise ValueError("n_bits must be >= 1")
     cin = int(cin) & 1
@@ -356,22 +455,42 @@ def build_reservoir_dataset(
     return X, Y
 
 
-def train_reservoir_linear_models(X_res: np.ndarray, Y: np.ndarray) -> List[SVC]:
-    """Train one linear SVM per output bit on reservoir features."""
+def train_reservoir_linear_models(
+    X_res: np.ndarray,
+    Y: np.ndarray,
+    *,
+    readout_kind: str = "svm",
+    readout_config: dict | None = None,
+    seed: int = 0,
+) -> List[Readout]:
+    """Train one linear readout per output bit on reservoir features.
+
+    Args:
+        X_res: Reservoir features of shape (n_samples, n_features).
+        Y: Output labels of shape (n_samples, n_bits_out).
+
+    Returns:
+        List[Readout]: One classifier per output bit.
+    """
     X_res = np.asarray(X_res, dtype=np.int8)
     Y = np.asarray(Y, dtype=np.int8)
-    models: List[SVC] = []
+    models: List[Readout] = []
+    rng = np.random.default_rng(seed)
     for i in range(Y.shape[1]):
-        reg = SVC(kernel="linear")
+        reg = make_readout(readout_kind, readout_config, rng=rng)
         reg.fit(X_res, Y[:, i])
         models.append(reg)
     return models
 
 
 def bit_balance(Y: np.ndarray) -> np.ndarray:
-    """
-    Return p(y=1) for each output bit.
-    Y shape: (n_samples, n_bits_out)
+    """Compute p(y=1) for each output bit.
+
+    Args:
+        Y: Labels of shape (n_samples, n_bits_out).
+
+    Returns:
+        np.ndarray: Probabilities of shape (n_bits_out,).
     """
     Y = np.asarray(Y, dtype=np.int8)
     if Y.ndim != 2:
@@ -380,9 +499,13 @@ def bit_balance(Y: np.ndarray) -> np.ndarray:
 
 
 def majority_baseline_accuracy(Y: np.ndarray) -> np.ndarray:
-    """
-    For each output bit, compute accuracy of predicting the majority class.
-    Returns array shape (n_bits_out,).
+    """Compute majority-class accuracy per output bit.
+
+    Args:
+        Y: Labels of shape (n_samples, n_bits_out).
+
+    Returns:
+        np.ndarray: Accuracy values of shape (n_bits_out,).
     """
     p1 = bit_balance(Y)
     p0 = 1.0 - p1
@@ -390,29 +513,43 @@ def majority_baseline_accuracy(Y: np.ndarray) -> np.ndarray:
 
 
 def constant_zero_baseline_accuracy(Y: np.ndarray) -> np.ndarray:
-    """
-    Accuracy per bit if always predicting 0.
+    """Compute accuracy per bit if always predicting 0.
+
+    Args:
+        Y: Labels of shape (n_samples, n_bits_out).
+
+    Returns:
+        np.ndarray: Accuracy values of shape (n_bits_out,).
     """
     p1 = bit_balance(Y)
     return 1.0 - p1
 
 
-def evaluate_linear_task(X: np.ndarray, Y: np.ndarray) -> dict:
-    """
-    Trains linear SVMs per output bit and returns:
-      - per_bit_acc
-      - full_acc
-      - full_correct, n_samples
-      - p1 (bit balance)
-      - majority_baseline_per_bit
-      - zero_baseline_per_bit
+def evaluate_linear_task(
+    X: np.ndarray,
+    Y: np.ndarray,
+    *,
+    readout_kind: str = "svm",
+    readout_config: dict | None = None,
+    seed: int = 0,
+) -> dict:
+    """Train linear readouts per output bit and report accuracy metrics.
+
+    Args:
+        X: Feature matrix of shape (n_samples, n_features).
+        Y: Output labels of shape (n_samples, n_bits_out).
+
+    Returns:
+        dict: Metrics including per-bit accuracy, full-vector accuracy,
+        and baseline statistics.
     """
     X = np.asarray(X, dtype=np.int8)
     Y = np.asarray(Y, dtype=np.int8)
 
-    models: List[SVC] = []
+    models: List[Readout] = []
+    rng = np.random.default_rng(seed)
     for i in range(Y.shape[1]):
-        reg = SVC(kernel="linear")
+        reg = make_readout(readout_kind, readout_config, rng=rng)
         reg.fit(X, Y[:, i])
         models.append(reg)
 

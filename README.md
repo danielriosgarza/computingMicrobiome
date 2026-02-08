@@ -36,7 +36,6 @@ pred = model.predict([[0, 0, 0, 1, 1]])
 After installation:
 
 ```bash
-cm-toy-addition
 cm-make-figures
 cm-opcode-test
 cm-opcode16-test
@@ -47,8 +46,33 @@ cm-kxor-visual
 cm-rule110-gif
 ```
 
+Toy-addition and readout-comparison experiments now live in top-level `experiments/`
+and can be run with:
+
+```bash
+python -m experiments.run_toy_addition_experiment
+python -m experiments.compare_readouts
+```
+
+Meta-evolutionary readout example (train, freeze, save, reload):
+
+```bash
+python examples/meta_evo_freeze_reload.py
+```
+
 ## Tests
 
 ```bash
 pytest
 ```
+
+## Docs
+
+Local preview:
+
+```bash
+pip install -e .[docs]
+mkdocs serve
+```
+
+GitHub Pages is published via `.github/workflows/docs.yml` on pushes to `main`.

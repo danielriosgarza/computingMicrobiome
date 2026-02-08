@@ -16,9 +16,21 @@ dependencies = [
 
 [project.optional-dependencies]
 gif = ["imageio"]
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "pymdown-extensions",
+]
+all = [
+    "imageio",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "pymdown-extensions",
+]
 
 [project.scripts]
-cm-toy-addition = "computingMicrobiome.cli:main_toy_addition"
 cm-make-figures = "computingMicrobiome.cli:main_make_figures"
 cm-opcode-test = "computingMicrobiome.cli:main_opcode_test"
 cm-opcode16-test = "computingMicrobiome.cli:main_opcode16_test"

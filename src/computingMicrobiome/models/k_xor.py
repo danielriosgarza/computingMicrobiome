@@ -1,23 +1,36 @@
+"""k-bit parity (XOR) classifier model."""
+
 from __future__ import annotations
 
 from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.svm import SVC
 import numpy as np
 
 from ..eca import eca_rule_lkt, eca_step
+from ..readouts.base import Readout
+from ..readouts.factory import make_readout
 from ..utils import create_input_locations, int_to_bits, flatten_history
 
 
 class KXOR(BaseEstimator, ClassifierMixin):
     """k-bit parity (XOR) classifier driven through an ECA reservoir.
 
-    Label definition (parity / XOR_k):
-      y = 1  if an odd number of input bits are 1
-          0  otherwise
+    Label definition:
+        y = 1 if an odd number of input bits are 1, else 0.
 
-    Notes:
-    - `fit` ignores the provided X/y and trains on the full truth table (2**bits).
-    - `predict(X)` expects `X` to be an array-like of bit-vectors of length `bits`.
+    Args:
+        bits: Number of input bits.
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition ("periodic", "fixed_zero", "fixed_one",
+            "mirror", or "random").
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Delay between input and output window.
+        injection_interval: Spacing between injected bits (in ticks).
+        injection_repetitions: Repeat count of input injection sequence.
+        seed: RNG seed for dataset generation and sampling.
+        readout_kind: "svm" or "evo".
+        readout_config: Optional configuration for the readout.
     """
 
     def __init__(
@@ -32,6 +45,8 @@ class KXOR(BaseEstimator, ClassifierMixin):
         injection_interval: int = 0,
         injection_repetitions: int = 1,
         seed: int = 0,
+        readout_kind: str = "svm",
+        readout_config: dict | None = None,
     ):
         self.bits = int(bits)
         self.rule_number = int(rule_number)
@@ -43,15 +58,24 @@ class KXOR(BaseEstimator, ClassifierMixin):
         self.injection_interval = int(injection_interval)
         self.injection_repetitions = int(injection_repetitions)
         self.seed = int(seed)
+        self.readout_kind = str(readout_kind)
+        self.readout_config = readout_config
 
         # learned / set during fit
         self.input_locations_: np.ndarray | None = None
         self._channel_idx_: np.ndarray | None = None
-        self.reg_: SVC | None = None
+        self.reg_: Readout | None = None
 
     @staticmethod
     def _parity(bits_arr: np.ndarray) -> int:
-        """Return XOR/parity of a bit-vector as 0/1."""
+        """Compute XOR parity of a bit vector.
+
+        Args:
+            bits_arr: Bit vector of shape (bits,).
+
+        Returns:
+            int: 1 if odd parity, otherwise 0.
+        """
         return int(np.sum(bits_arr.astype(np.int8)) % 2)
 
     def _create_input_streams(self, bits_arr: np.ndarray) -> np.ndarray:
@@ -138,6 +162,15 @@ class KXOR(BaseEstimator, ClassifierMixin):
         return output_features
 
     def fit(self, X=None, y=None):
+        """Fit the classifier using the full truth table.
+
+        Args:
+            X: Ignored (present for sklearn API compatibility).
+            y: Ignored (present for sklearn API compatibility).
+
+        Returns:
+            KXOR: Fitted estimator.
+        """
         rng = np.random.default_rng(self.seed)
 
         num_channels = self.bits + 2
@@ -157,11 +190,19 @@ class KXOR(BaseEstimator, ClassifierMixin):
             X_train.append(self._run_episode(bits_arr, rng, rule))
             y_train.append(self._parity(bits_arr))
 
-        self.reg_ = SVC(kernel="linear")
+        self.reg_ = make_readout(self.readout_kind, self.readout_config, rng=rng)
         self.reg_.fit(X_train, y_train)
         return self
 
     def predict(self, X):
+        """Predict parity for a batch of input bit vectors.
+
+        Args:
+            X: Array-like of shape (n_samples, bits).
+
+        Returns:
+            np.ndarray: Predicted parity values of shape (n_samples,).
+        """
         if self.reg_ is None:
             raise RuntimeError("Model not fitted: call fit() before predict().")
 

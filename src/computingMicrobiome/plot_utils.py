@@ -13,7 +13,7 @@ import numpy as np
 from matplotlib.colors import BoundaryNorm, ListedColormap
 from sklearn.decomposition import PCA
 
-from .experiments.toy_addition_experiment import (
+from .tasks.toy_addition import (
     build_reservoir_dataset,
     enumerate_addition_dataset,
     evaluate_linear_task,
@@ -37,7 +37,22 @@ def plot_spacetime(
     ax: Optional[plt.Axes] = None,
     show: bool = True,
 ) -> plt.Axes:
-    """Plot a space-time diagram for cellular automata states."""
+    """Plot a space-time diagram for cellular automata states.
+
+    Args:
+        states: Binary state history of shape (T, width).
+        title: Plot title.
+        cmap: Optional matplotlib colormap name.
+        background_color: Color for inactive cells.
+        active_color: Color for active cells.
+        border_color: Color for cell borders.
+        border_width: Border line width.
+        ax: Optional matplotlib Axes to draw into.
+        show: Whether to call plt.show().
+
+    Returns:
+        plt.Axes: Axes containing the plot.
+    """
     if ax is None:
         _, ax = plt.subplots(figsize=(10, 4))
     ax.set_facecolor(background_color)
@@ -69,7 +84,21 @@ def plot_spacetime_with_density(
     border_width: float = 0.2,
     show: bool = True,
 ) -> Tuple[plt.Axes, plt.Axes]:
-    """Plot space-time plus density-over-time."""
+    """Plot space-time diagram plus density-over-time.
+
+    Args:
+        states: Binary state history of shape (T, width).
+        title: Plot title.
+        cmap: Optional matplotlib colormap name.
+        background_color: Color for inactive cells.
+        active_color: Color for active cells.
+        border_color: Color for cell borders.
+        border_width: Border line width.
+        show: Whether to call plt.show().
+
+    Returns:
+        Tuple[plt.Axes, plt.Axes]: Axes for the space-time and density plots.
+    """
     fig, (ax_img, ax_den) = plt.subplots(
         nrows=2,
         ncols=1,
@@ -110,7 +139,18 @@ def plot_activity(
     background_color: str = DEFAULT_BG_COLOR,
     show: bool = True,
 ) -> plt.Axes:
-    """Plot the fraction of active cells at each time step."""
+    """Plot the fraction of active cells at each time step.
+
+    Args:
+        states: Binary state history of shape (T, width).
+        title: Plot title.
+        line_color: Line color.
+        background_color: Background color.
+        show: Whether to call plt.show().
+
+    Returns:
+        plt.Axes: Axes containing the plot.
+    """
     density = np.mean(states, axis=1)
     _, ax = plt.subplots(figsize=(8, 3))
     ax.set_facecolor(background_color)
@@ -132,7 +172,18 @@ def plot_entropy(
     background_color: str = DEFAULT_BG_COLOR,
     show: bool = True,
 ) -> plt.Axes:
-    """Plot per-time-step Shannon entropy for binary CA states."""
+    """Plot per-time-step Shannon entropy for binary CA states.
+
+    Args:
+        states: Binary state history of shape (T, width).
+        title: Plot title.
+        line_color: Line color.
+        background_color: Background color.
+        show: Whether to call plt.show().
+
+    Returns:
+        plt.Axes: Axes containing the plot.
+    """
     density = np.mean(states, axis=1)
     eps = 1e-12
     entropy = -(
@@ -160,7 +211,19 @@ def plot_rule_table(
     border_width: float = 0.4,
     show: bool = True,
 ) -> plt.Axes:
-    """Plot the 8 neighborhood patterns and outputs for an ECA rule."""
+    """Plot the 8 neighborhood patterns and outputs for an ECA rule.
+
+    Args:
+        rule: ECA rule number (0-255).
+        background_color: Color for inactive cells.
+        active_color: Color for active cells.
+        border_color: Color for cell borders.
+        border_width: Border line width.
+        show: Whether to call plt.show().
+
+    Returns:
+        plt.Axes: Axes containing the plot.
+    """
     if rule < 0 or rule > 255:
         raise ValueError("rule must be in [0, 255]")
     patterns = np.array(
@@ -211,7 +274,20 @@ def plot_snapshot(
     border_width: float = 0.2,
     show: bool = True,
 ) -> plt.Axes:
-    """Plot a single time slice of the automaton."""
+    """Plot a single time slice of the automaton.
+
+    Args:
+        states: Binary state history of shape (T, width).
+        time_step: Time step index to plot.
+        background_color: Color for inactive cells.
+        active_color: Color for active cells.
+        border_color: Color for cell borders.
+        border_width: Border line width.
+        show: Whether to call plt.show().
+
+    Returns:
+        plt.Axes: Axes containing the plot.
+    """
     if time_step < 0 or time_step >= states.shape[0]:
         raise IndexError("time_step out of range")
     _, ax = plt.subplots(figsize=(8, 1.5))
@@ -245,7 +321,22 @@ def save_spacetime_image(
     border_width: float = 0.2,
     dpi: int = 150,
 ) -> Path:
-    """Save a space-time plot as a static image."""
+    """Save a space-time plot as a static image.
+
+    Args:
+        states: Binary state history of shape (T, width).
+        path: Output file path or directory.
+        title: Plot title.
+        cmap: Optional matplotlib colormap name.
+        background_color: Color for inactive cells.
+        active_color: Color for active cells.
+        border_color: Color for cell borders.
+        border_width: Border line width.
+        dpi: Output resolution.
+
+    Returns:
+        Path: Path to the saved image file.
+    """
     path = Path(path)
     if path.suffix.lower() != ".gif":
         if path.exists() and path.is_dir():
@@ -285,12 +376,23 @@ def make_spacetime_gif(
     border_px: int = 1,
     loop: int = 0,
 ) -> Path:
-    """
-    Create a GIF that reveals the space-time diagram over time.
+    """Create a GIF that reveals the space-time diagram over time.
 
-    reveal_mode:
-        - "grow": each frame shows rows [0:t]
-        - "slide": a moving window of 50 rows
+    Args:
+        states: Binary state history of shape (T, width).
+        path: Output file path.
+        reveal_mode: "grow" (incremental rows) or "slide" (moving window).
+        duration_ms: Frame duration in milliseconds.
+        cmap: Optional matplotlib colormap name.
+        background_color: Color for inactive cells.
+        active_color: Color for active cells.
+        border_color: Color for cell borders.
+        cell_size: Pixel size of each cell.
+        border_px: Border thickness in pixels.
+        loop: GIF loop count (0 = infinite).
+
+    Returns:
+        Path: Path to the saved GIF file.
     """
     try:
         import imageio.v2 as imageio  # type: ignore[import-not-found]
@@ -328,8 +430,11 @@ def make_spacetime_gif(
 
 
 def plot_red_green_grid(correctness: np.ndarray, title: str = ""):
-    """
-    correctness: (n_trials, bits) with values {-1, +1}
+    """Plot correctness grid with red/green tiles.
+
+    Args:
+        correctness: Array of shape (n_trials, bits) with values {-1, +1}.
+        title: Plot title.
     """
     correctness = np.asarray(correctness)
     n_trials, bits = correctness.shape
@@ -388,11 +493,23 @@ def plot_xor_episode(
     border_width: float = 0.2,
     show: bool = True,
 ) -> tuple[plt.Axes, plt.Axes]:
-    """
-    Plot XOR episode with spacetime diagram and input timeline.
+    """Plot XOR episode with spacetime diagram and input timeline.
 
-    inputs: shape (L, 4) where L is number of ticks
-    output_tick: index of output tick in [0, L-1]
+    Args:
+        states: Binary state history of shape (T, width).
+        inputs: Input stream of shape (L, 4).
+        output_tick: Index of output tick in [0, L-1].
+        y_true: True output bit.
+        y_pred: Optional predicted output bit.
+        title: Plot title.
+        background_color: Background color.
+        active_color: Active cell color.
+        border_color: Border color.
+        border_width: Border line width.
+        show: Whether to call plt.show().
+
+    Returns:
+        Tuple[plt.Axes, plt.Axes]: Axes for states and inputs.
     """
     fig, (ax_states, ax_inputs) = plt.subplots(
         nrows=2,
@@ -464,11 +581,21 @@ def plot_xor_series(
     border_width: float = 0.2,
     show: bool = True,
 ) -> tuple[plt.Axes, plt.Axes]:
-    """
-    Plot XOR input/output series as timelines.
+    """Plot XOR input/output series as timelines.
 
-    inputs: shape (L, 4) with channels [A, B, distractor, cue]
-    outputs: shape (L,) with values {0,1} in output window, else -1
+    Args:
+        inputs: Input stream of shape (L, 4) with channels [A, B, distractor, cue].
+        outputs: Output series of shape (L,) with values {0,1} in output window, else -1.
+        show_aux_channels: Whether to include distractor and cue channels.
+        title: Plot title.
+        background_color: Background color.
+        active_color: Active cell color.
+        border_color: Border color.
+        border_width: Border line width.
+        show: Whether to call plt.show().
+
+    Returns:
+        Tuple[plt.Axes, plt.Axes]: Axes for inputs and outputs.
     """
     fig, (ax_inputs, ax_outputs) = plt.subplots(
         nrows=2,
@@ -533,11 +660,21 @@ def plot_xor_summary(
     border_width: float = 0.2,
     show: bool = True,
 ) -> tuple[plt.Axes, plt.Axes, plt.Axes]:
-    """
-    Plot side-by-side heatmaps: inputs, predictions, correctness.
+    """Plot side-by-side heatmaps: inputs, predictions, correctness.
 
-    inputs: shape (L, 4) with channels [A, B, distractor, cue]
-    y_true/y_pred: shape (L,), -1 outside output window
+    Args:
+        inputs: Input stream of shape (L, 4).
+        y_true: True output series of shape (L,) with -1 outside output window.
+        y_pred: Predicted output series of shape (L,) with -1 outside output window.
+        title: Plot title.
+        background_color: Background color.
+        active_color: Active cell color.
+        border_color: Border color.
+        border_width: Border line width.
+        show: Whether to call plt.show().
+
+    Returns:
+        Tuple[plt.Axes, plt.Axes, plt.Axes]: Axes for inputs, predictions, correctness.
     """
     output_mask = y_true != -1
     if not np.any(output_mask):
@@ -610,11 +747,21 @@ def plot_xor_batch_summary(
     border_width: float = 0.4,
     show: bool = True,
 ) -> tuple[plt.Axes, plt.Axes, plt.Axes]:
-    """
-    Plot side-by-side heatmaps for XOR batch runs.
+    """Plot side-by-side heatmaps for XOR batch runs.
 
-    inputs_a: shape (n_trials, n_bits)
-    y_pred/y_true: shape (n_trials, n_bits)
+    Args:
+        inputs_a: Input bits for operand A, shape (n_trials, n_bits).
+        y_pred: Predicted outputs, shape (n_trials, n_bits).
+        y_true: True outputs, shape (n_trials, n_bits).
+        title: Plot title.
+        background_color: Background color.
+        active_color: Active cell color.
+        border_color: Border color.
+        border_width: Border line width.
+        show: Whether to call plt.show().
+
+    Returns:
+        Tuple[plt.Axes, plt.Axes, plt.Axes]: Axes for inputs, predictions, correctness.
     """
     if inputs_a.shape != y_pred.shape or y_pred.shape != y_true.shape:
         raise ValueError("inputs_a, y_pred, and y_true must have matching shapes")
@@ -690,11 +837,23 @@ def plot_xor_classification_summary(
     border_width: float = 0.4,
     show: bool = True,
 ) -> tuple[plt.Axes, plt.Axes, plt.Axes]:
-    """
-    Plot side-by-side heatmaps for XOR batch runs, for single-bit output.
+    """Plot side-by-side heatmaps for XOR batch runs (single-bit output).
 
-    inputs: shape (n_trials, n_bits)
-    y_pred_single/y_true_single: shape (n_trials,)
+    Args:
+        inputs: Input bits, shape (n_trials, n_bits).
+        y_pred_single: Predicted outputs, shape (n_trials,).
+        y_true_single: True outputs, shape (n_trials,).
+        title: Plot title.
+        background_color: Background color.
+        active_color: Active cell color.
+        correct_color: Color for correct predictions.
+        wrong_color: Color for incorrect predictions.
+        border_color: Border color.
+        border_width: Border line width.
+        show: Whether to call plt.show().
+
+    Returns:
+        Tuple[plt.Axes, plt.Axes, plt.Axes]: Axes for inputs, predictions, correctness.
     """
     n_trials, n_bits = inputs.shape
 
@@ -954,6 +1113,15 @@ def _reservoir_params_from_defaults() -> dict:
 
 
 def figure_full_accuracy_vs_n(fig_dir: str, n_list: list[int]) -> list[dict]:
+    """Generate full-vector accuracy vs N plot and results.
+
+    Args:
+        fig_dir: Output directory for figures.
+        n_list: List of bit-widths to evaluate.
+
+    Returns:
+        list[dict]: Results per bit-width for direct and reservoir models.
+    """
     results = []
     direct_acc = []
     reservoir_acc = []
@@ -1002,6 +1170,12 @@ def figure_full_accuracy_vs_n(fig_dir: str, n_list: list[int]) -> list[dict]:
 
 
 def figure_per_bit_accuracy_and_balance(fig_dir: str, n_bits: int):
+    """Generate per-bit accuracy and balance figure.
+
+    Args:
+        fig_dir: Output directory for figures.
+        n_bits: Bit-width to evaluate.
+    """
     params = _reservoir_params_from_defaults()
 
     X_direct, Y_direct = enumerate_addition_dataset(n_bits)
@@ -1050,6 +1224,13 @@ def figure_per_bit_accuracy_and_balance(fig_dir: str, n_bits: int):
 
 
 def figure_ablation_itr(fig_dir: str, n_bits: int, itr_list: list[int]):
+    """Generate accuracy vs itr ablation figure.
+
+    Args:
+        fig_dir: Output directory for figures.
+        n_bits: Bit-width to evaluate.
+        itr_list: Iteration counts to sweep.
+    """
     params = _reservoir_params_from_defaults()
     acc_full = []
     acc_per_bit_mean = []
@@ -1076,6 +1257,12 @@ def figure_ablation_itr(fig_dir: str, n_bits: int, itr_list: list[int]):
 
 
 def figure_pca_direct_vs_reservoir(fig_dir: str, n_bits: int):
+    """Generate PCA comparison for direct vs reservoir features.
+
+    Args:
+        fig_dir: Output directory for figures.
+        n_bits: Bit-width to evaluate.
+    """
     params = _reservoir_params_from_defaults()
 
     X_direct, _ = enumerate_addition_dataset(n_bits)
@@ -1117,6 +1304,7 @@ def figure_pca_direct_vs_reservoir(fig_dir: str, n_bits: int):
 
 
 def main() -> None:
+    """Generate all toy addition figures into the figures directory."""
     fig_dir = _ensure_figures_dir()
 
     n_list = [1, 2, 3, 4, 5]

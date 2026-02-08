@@ -6,7 +6,6 @@ from .benchmarks.k_compound_opcode_bm import apply_compound_opcode
 from .benchmarks.k_opcode_logic_bm import apply_opcode as apply_opcode_8
 from .benchmarks.k_opcode_logic16_bm import apply_opcode as apply_opcode_16
 from .eca import eca_rule_lkt
-from .experiments.run_toy_addition_experiment import main as toy_addition_main
 from .models import (
     KBitMemory,
     KCompoundOpcode,
@@ -17,10 +16,6 @@ from .models import (
 )
 from .plot_utils import make_spacetime_gif, plot_red_green_grid, plot_xor_classification_summary
 from .utils import bits_lsb_to_int, int_to_bits, int_to_bits_lsb
-
-
-def main_toy_addition() -> None:
-    toy_addition_main()
 
 
 def main_make_figures() -> None:

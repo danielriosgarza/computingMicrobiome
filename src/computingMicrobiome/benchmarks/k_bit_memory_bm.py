@@ -7,17 +7,22 @@ and trains a linear readout on the output window to assess memory.
 from typing import Optional, Tuple
 
 import numpy as np
-from sklearn.svm import SVC
 
 from ..eca import eca_rule_lkt, eca_step
+from ..readouts.base import Readout
+from ..readouts.factory import make_readout
 from ..utils import create_input_locations, flatten_history, int_to_bits
 
 
 def true_bits_from_episode_outputs(outputs_tick: np.ndarray, bits: int) -> np.ndarray:
-    """
-    True bits are encoded in outputs_tick[-bits:]:
-        y0=1 -> bit=1
-        y1=1 -> bit=0
+    """Decode target bits from the output streams.
+
+    Args:
+        outputs_tick: Output streams of shape (L, 3).
+        bits: Number of bits encoded at the end of the episode.
+
+    Returns:
+        np.ndarray: Bit vector of shape (bits,) with values in {0, 1}.
     """
     out = outputs_tick[-bits:]
     true = np.full(bits, -1, dtype=np.int8)
@@ -27,12 +32,15 @@ def true_bits_from_episode_outputs(outputs_tick: np.ndarray, bits: int) -> np.nd
 
 
 def create_input_streams(bits_arr: np.ndarray, d_period: int) -> np.ndarray:
-    """
-    Returns array shape (L, 4), with L = d_period + 2*B where B=len(bits_arr).
-    Channel 0: bits at start
-    Channel 1: flipped bits at start
-    Channel 2: distractor (mostly 1s), but zeros during write and cue
-    Channel 3: cue (single 1 one step before output window)
+    """Create input streams for the memory task.
+
+    Args:
+        bits_arr: Bit vector of shape (bits,).
+        d_period: Delay period between input and recall window.
+
+    Returns:
+        np.ndarray: Input streams of shape (L, 4) where
+        L = d_period + 2 * bits.
     """
 
     B = len(bits_arr)
@@ -58,11 +66,15 @@ def create_input_streams(bits_arr: np.ndarray, d_period: int) -> np.ndarray:
 
 
 def create_output_streams(bits_arr: np.ndarray, d_period: int) -> np.ndarray:
-    """
-    Returns array shape (L, 3) with L = d_period + 2*B.
-    Stream 0: bits in the last B positions
-    Stream 1: flipped bits in the last B positions
-    Stream 2: "none/distractor": ones except forced to 0 in last B positions
+    """Create output streams for the memory task.
+
+    Args:
+        bits_arr: Bit vector of shape (bits,).
+        d_period: Delay period between input and recall window.
+
+    Returns:
+        np.ndarray: Output streams of shape (L, 3) where
+        L = d_period + 2 * bits.
     """
 
     B = len(bits_arr)
@@ -79,7 +91,14 @@ def create_output_streams(bits_arr: np.ndarray, d_period: int) -> np.ndarray:
 
 
 def label_from_outputs(triple: np.ndarray) -> int:
-    """Map [y0,y1,y2] -> class 0/1/2 exactly like the original."""
+    """Map [y0, y1, y2] to class 0/1/2.
+
+    Args:
+        triple: Output triple of shape (3,).
+
+    Returns:
+        int: Class label (0, 1, or 2).
+    """
     if triple[0] == 1:
         return 0
     if triple[1] == 1:
@@ -96,15 +115,27 @@ def run_episode_record(
     d_period: int,
     rng: np.random.Generator,
     input_locations: np.ndarray,
-    reg: Optional[SVC] = None,
+    reg: Optional[Readout] = None,
     collect_states: bool = True,
     x0_mode: str = "zeros",
 ) -> dict:
-    """
-    Run one episode and optionally record states and readout predictions.
+    """Run one episode and optionally record states and predictions.
 
-    Returns a dict of arrays including inputs/outputs per tick, features,
-    predictions, and (optionally) full ECA states over time.
+    Args:
+        bits_arr: Bit vector of shape (bits,).
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        itr: Number of iterations between ticks.
+        d_period: Delay period between input and recall.
+        rng: NumPy random generator.
+        input_locations: Injection locations array.
+        reg: Optional trained readout model for predictions.
+        collect_states: Whether to store the full state history.
+        x0_mode: Initial state mode ("zeros" or "random").
+
+    Returns:
+        dict: Episode data including inputs, outputs, features, and predictions.
     """
     rule = eca_rule_lkt(rule_number)
 
@@ -188,13 +219,21 @@ def build_dataset_output_window_only(
     d_period: int,
     seed: int = 0,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Build a dataset using only the output window.
+    """Build a dataset using only the output window.
+
+    Args:
+        bits: Number of bits to store/recall.
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Delay period between input and recall.
+        seed: RNG seed.
 
     Returns:
-        X: (2^bits * bits, itr*width)
-        y: (2^bits * bits,) with values 0/1
-        input_locations: fixed injection sites
+        Tuple[np.ndarray, np.ndarray, np.ndarray]: Feature matrix, labels,
+        and input locations.
     """
     rng = np.random.default_rng(seed)
     input_locations = create_input_locations(width, recurrence, 4, rng)
@@ -241,8 +280,26 @@ def train_memory_readout(
     itr: int,
     d_period: int,
     seed_train: int = 0,
-) -> Tuple[SVC, np.ndarray]:
-    """Train a linear SVM readout on the output window dataset."""
+    readout_kind: str = "svm",
+    readout_config: Optional[dict] = None,
+) -> Tuple[Readout, np.ndarray]:
+    """Train a linear readout on the output-window dataset.
+
+    Args:
+        bits: Number of bits to store/recall.
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Delay period between input and recall.
+        seed_train: RNG seed for training data.
+        readout_kind: "svm" or "evo".
+        readout_config: Optional configuration for the readout.
+
+    Returns:
+        Tuple[Readout, np.ndarray]: Trained classifier and input locations.
+    """
     X, y, input_locations = build_dataset_output_window_only(
         bits,
         rule_number,
@@ -253,7 +310,8 @@ def train_memory_readout(
         d_period,
         seed=seed_train,
     )
-    reg = SVC(kernel="linear")
+    rng = np.random.default_rng(seed_train)
+    reg = make_readout(readout_kind, readout_config, rng=rng)
     reg.fit(X, y)
     print("Training set shape:", X.shape, "labels:", np.unique(y))
     print("Training accuracy (output-window only):", reg.score(X, y))
@@ -261,7 +319,7 @@ def train_memory_readout(
 
 
 def evaluate_memory_trials(
-    reg: SVC,
+    reg: Readout,
     bits: int,
     rule_number: int,
     width: int,
@@ -274,7 +332,26 @@ def evaluate_memory_trials(
     seed_trials: int = 0,
     resample_input_locations: bool = False,
 ) -> np.ndarray:
-    """Return correctness matrix (n_trials, bits) with values +1/-1."""
+    """Evaluate recall correctness across randomized trials.
+
+    Args:
+        reg: Trained readout model.
+        bits: Number of bits.
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Delay period between input and recall.
+        input_locations: Injection locations array.
+        n_trials: Number of random trials.
+        seed_trials: RNG seed for trials.
+        resample_input_locations: If True, resample locations per trial.
+
+    Returns:
+        np.ndarray: Correctness matrix of shape (n_trials, bits) with values
+        in {-1, 1}.
+    """
     rng = np.random.default_rng(seed_trials)
 
     correctness = np.empty((n_trials, bits), dtype=np.int8)

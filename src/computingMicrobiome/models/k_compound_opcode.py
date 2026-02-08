@@ -1,23 +1,38 @@
+"""Compound opcode classifier model."""
+
 from __future__ import annotations
 
 from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.svm import SVC
 import numpy as np
 
 from ..benchmarks.k_compound_opcode_bm import (
     train_compound_opcode_readout,
     run_episode_record_tagged,
 )
+from ..readouts.base import Readout
 
 
 class KCompoundOpcode(BaseEstimator, ClassifierMixin):
     """Compound opcode classifier with two 4-bit opcodes and operands.
 
-    Call pattern:
-        model.predict([[op1_3, op1_2, op1_1, op1_0, a, b, op2_3, op2_2, op2_1, op2_0, c], ...])
+    Each opcode encodes the truth table for f(x, y) with ordering:
+    (x, y) = 00, 01, 10, 11. The first opcode is applied to (a, b),
+    and its output is then combined with c using the second opcode.
 
-    Opcode bits are MSB-first (op3 op2 op1 op0), and each opcode encodes the
-    truth table for f(x,y) in order (x,y) = 00, 01, 10, 11.
+    Args:
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition ("periodic", "fixed_zero", "fixed_one",
+            "mirror", or "random").
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Delay between input and output window.
+        repeats: Number of episode repeats per sample.
+        feature_mode: Feature extraction mode ("cue_tick" or "window").
+        output_window: Output window length when using windowed features.
+        seed: RNG seed for dataset generation and sampling.
+        readout_kind: "svm" or "evo".
+        readout_config: Optional configuration for the readout.
     """
 
     def __init__(
@@ -32,6 +47,8 @@ class KCompoundOpcode(BaseEstimator, ClassifierMixin):
         feature_mode: str = "cue_tick",
         output_window: int = 2,
         seed: int = 0,
+        readout_kind: str = "svm",
+        readout_config: dict | None = None,
     ):
         self.rule_number = int(rule_number)
         self.width = int(width)
@@ -43,12 +60,22 @@ class KCompoundOpcode(BaseEstimator, ClassifierMixin):
         self.feature_mode = str(feature_mode)
         self.output_window = int(output_window)
         self.seed = int(seed)
+        self.readout_kind = str(readout_kind)
+        self.readout_config = readout_config
 
-        self.reg_: SVC | None = None
+        self.reg_: Readout | None = None
         self.input_locations_: np.ndarray | None = None
 
     def fit(self, X=None, y=None):
-        # Train on full 2048-case dataset.
+        """Fit the classifier using the full 2048-case dataset.
+
+        Args:
+            X: Ignored (present for sklearn API compatibility).
+            y: Ignored (present for sklearn API compatibility).
+
+        Returns:
+            KCompoundOpcode: Fitted estimator.
+        """
         self.reg_, self.input_locations_ = train_compound_opcode_readout(
             rule_number=self.rule_number,
             width=self.width,
@@ -60,10 +87,21 @@ class KCompoundOpcode(BaseEstimator, ClassifierMixin):
             feature_mode=self.feature_mode,
             output_window=self.output_window,
             seed_train=self.seed,
+            readout_kind=self.readout_kind,
+            readout_config=self.readout_config,
         )
         return self
 
     def predict(self, X):
+        """Predict compound opcode outputs.
+
+        Args:
+            X: Array-like of shape (n_samples, 11) with
+                [op1_3, op1_2, op1_1, op1_0, a, b, op2_3, op2_2, op2_1, op2_0, c].
+
+        Returns:
+            np.ndarray: Predicted outputs of shape (n_samples,).
+        """
         if self.reg_ is None or self.input_locations_ is None:
             raise RuntimeError("Model not fitted: call fit() before predict().")
 

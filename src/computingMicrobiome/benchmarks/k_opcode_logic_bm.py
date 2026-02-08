@@ -28,10 +28,10 @@ from __future__ import annotations
 from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
-from sklearn.svm import SVC
-
 from ..eca import eca_rule_lkt, eca_step
 from ..utils import create_input_locations, flatten_history
+from ..readouts.base import Readout
+from ..readouts.factory import make_readout
 
 
 # -----------------------------
@@ -54,13 +54,29 @@ VAL_CHANNELS = [VAL_0, VAL_1]
 
 
 def opcode_to_int(op_bits_msb_first: np.ndarray) -> int:
-    """Convert 3 opcode bits in MSB-first order [op2, op1, op0] to int 0..7."""
+    """Convert MSB-first opcode bits to an integer in [0, 7].
+
+    Args:
+        op_bits_msb_first: Array of shape (3,) in order [op2, op1, op0].
+
+    Returns:
+        int: Opcode integer in [0, 7].
+    """
     b = op_bits_msb_first.astype(int).tolist()
     return (b[0] << 2) | (b[1] << 1) | b[2]
 
 
 def apply_opcode(op_bits_msb_first: np.ndarray, a: int, b: int) -> int:
-    """Apply the opcode-selected Boolean operation and return 0/1."""
+    """Apply the opcode-selected Boolean operation.
+
+    Args:
+        op_bits_msb_first: Array of shape (3,) in order [op2, op1, op0].
+        a: Operand bit (0 or 1).
+        b: Operand bit (0 or 1).
+
+    Returns:
+        int: Result bit (0 or 1).
+    """
     op = opcode_to_int(op_bits_msb_first)
     a = int(a) & 1
     b = int(b) & 1
@@ -85,7 +101,15 @@ def apply_opcode(op_bits_msb_first: np.ndarray, a: int, b: int) -> int:
 
 
 def make_packet(tag_channel: int, value: int) -> np.ndarray:
-    """Create one 9-channel packet with given tag channel and bit value."""
+    """Create a single tagged packet.
+
+    Args:
+        tag_channel: Tag channel index.
+        value: Bit value (0 or 1).
+
+    Returns:
+        np.ndarray: Packet of shape (9,) with dtype int8.
+    """
     pkt = np.zeros(N_CHANNELS, dtype=np.int8)
     pkt[tag_channel] = 1
     if int(value) == 0:
@@ -103,16 +127,19 @@ def build_tagged_stream(
     repeats: int = 1,
     order: Optional[Sequence[str]] = None,
 ) -> np.ndarray:
-    """Build the input stream of shape (L, 9).
+    """Build the tagged input stream for a single episode.
 
     Args:
-      op_bits_msb_first: array shape (3,) in order [op2, op1, op0]
-      a, b: operand bits
-      d_period: distractor length in input ticks
-      repeats: how many times to repeat the 5 write packets (strengthens imprint)
-      order: optional sequence of field names among {"op0","op1","op2","a","b"}.
-             If None, uses fixed order ["op0","op1","op2","a","b"].
-             Order does NOT change semantics because tags are explicit.
+        op_bits_msb_first: Array of shape (3,) in order [op2, op1, op0].
+        a: Operand bit (0 or 1).
+        b: Operand bit (0 or 1).
+        d_period: Distractor length in input ticks.
+        repeats: Number of times to repeat the write packets.
+        order: Optional sequence of field names among {"op0", "op1", "op2", "a", "b"}.
+            If None, uses ["op0", "op1", "op2", "a", "b"].
+
+    Returns:
+        np.ndarray: Stream of shape (L, 9).
     """
     op_bits_msb_first = np.asarray(op_bits_msb_first, dtype=np.int8).reshape(-1)
     if op_bits_msb_first.size != 3:
@@ -168,18 +195,35 @@ def run_episode_record_tagged(
     input_locations: np.ndarray,
     repeats: int = 1,
     order: Optional[Sequence[str]] = None,
-    reg: Optional[SVC] = None,
+    reg: Optional[Readout] = None,
     collect_states: bool = True,
     x0_mode: str = "zeros",
     feature_mode: str = "cue_tick",
     output_window: int = 2,
 ) -> dict:
-    """Run one tagged-program episode and (optionally) score with a readout.
+    """Run one tagged-program episode and optionally score with a readout.
 
-    feature_mode:
-      - "cue_tick": use features at the cue tick only (one sample per episode)
-      - "output_window": use concatenated features over the last `output_window` ticks
-                         (returns X_out shape (output_window, itr*width))
+    Args:
+        op_bits_msb_first: Array of shape (3,) in order [op2, op1, op0].
+        a: Operand bit (0 or 1).
+        b: Operand bit (0 or 1).
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        itr: Number of iterations between ticks.
+        d_period: Distractor length in input ticks.
+        rng: NumPy random generator.
+        input_locations: Injection locations array.
+        repeats: Number of times to repeat the write packets.
+        order: Optional packet field ordering.
+        reg: Optional trained readout model for predictions.
+        collect_states: Whether to store the full state history.
+        x0_mode: Initial state mode ("zeros" or "random").
+        feature_mode: "cue_tick" or "output_window".
+        output_window: Window length when feature_mode is "output_window".
+
+    Returns:
+        dict: Episode data including inputs, features, predictions, and states.
     """
     rule = eca_rule_lkt(rule_number)
 
@@ -279,7 +323,25 @@ def build_dataset_programmed_logic(
     seed: int = 0,
     order: Optional[Sequence[str]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Enumerate all 8 opcodes x 4 operands and return (X, y, input_locations)."""
+    """Build a dataset for the programmed-logic task.
+
+    Args:
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Distractor length in input ticks.
+        repeats: Number of times to repeat write packets.
+        feature_mode: "cue_tick" or "output_window".
+        output_window: Window length when feature_mode is "output_window".
+        seed: RNG seed for dataset generation.
+        order: Optional packet field ordering.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray]: Feature matrix, labels,
+        and input locations.
+    """
     rng = np.random.default_rng(seed)
     input_locations = create_input_locations(width, recurrence, N_CHANNELS, rng)
 
@@ -335,8 +397,29 @@ def train_programmed_logic_readout(
     output_window: int = 2,
     seed_train: int = 0,
     order: Optional[Sequence[str]] = None,
-) -> Tuple[SVC, np.ndarray]:
-    """Train a linear SVM readout for the programmed-logic task."""
+    readout_kind: str = "svm",
+    readout_config: Optional[dict] = None,
+) -> Tuple[Readout, np.ndarray]:
+    """Train a linear readout for the programmed-logic task.
+
+    Args:
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Distractor length in input ticks.
+        repeats: Number of times to repeat write packets.
+        feature_mode: "cue_tick" or "output_window".
+        output_window: Window length when feature_mode is "output_window".
+        seed_train: RNG seed for training data.
+        order: Optional packet field ordering.
+        readout_kind: "svm" or "evo".
+        readout_config: Optional configuration for the readout.
+
+    Returns:
+        Tuple[Readout, np.ndarray]: Trained classifier and input locations.
+    """
     X, y, input_locations = build_dataset_programmed_logic(
         rule_number=rule_number,
         width=width,
@@ -350,6 +433,7 @@ def train_programmed_logic_readout(
         seed=seed_train,
         order=order,
     )
-    reg = SVC(kernel="linear")
+    rng = np.random.default_rng(seed_train)
+    reg = make_readout(readout_kind, readout_config, rng=rng)
     reg.fit(X, y)
     return reg, input_locations

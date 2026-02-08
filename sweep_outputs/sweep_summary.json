@@ -1,0 +1,24 @@
+{
+  "serial_adder": {
+    "n_seeds": 20,
+    "full_acc_mean": 0.588125,
+    "full_acc_std": 0.02798297473464892,
+    "per_bit_mean": [
+      0.588125
+    ],
+    "per_bit_std": [
+      0.02798297473464892
+    ]
+  },
+  "compound_opcode": {
+    "n_seeds": 20,
+    "full_acc_mean": 0.51591796875,
+    "full_acc_std": 0.0101292177057543,
+    "per_bit_mean": [
+      0.51591796875
+    ],
+    "per_bit_std": [
+      0.0101292177057543
+    ]
+  }
+}

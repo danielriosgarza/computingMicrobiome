@@ -12,9 +12,9 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 import numpy as np
-from sklearn.svm import SVC
 
 from ..eca import eca_rule_lkt, eca_step
+from ..readouts.base import Readout
 from ..utils import create_input_locations, flatten_history, int_to_bits_lsb
 
 # -----------------------------
@@ -30,7 +30,15 @@ N_CHANNELS = 5
 
 
 def make_packet(tag_channel: int, value: int) -> np.ndarray:
-    """Create one 5-channel packet with given tag channel and bit value."""
+    """Create a single tagged packet.
+
+    Args:
+        tag_channel: Tag channel index.
+        value: Bit value (0 or 1).
+
+    Returns:
+        np.ndarray: Packet of shape (5,) with dtype int8.
+    """
     pkt = np.zeros(N_CHANNELS, dtype=np.int8)
     pkt[tag_channel] = 1
     if int(value) == 1:
@@ -43,7 +51,16 @@ def build_tagged_stream_serial_adder(
     b_bits_lsb: np.ndarray,
     d_period: int,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Build input stream (L, 5) and cue indices for serial addition."""
+    """Build input stream and cue indices for serial addition.
+
+    Args:
+        a_bits_lsb: LSB-first bits for A.
+        b_bits_lsb: LSB-first bits for B.
+        d_period: Distractor length in input ticks.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: Stream of shape (L, 5) and cue indices.
+    """
     a_bits_lsb = np.asarray(a_bits_lsb, dtype=np.int8).reshape(-1)
     b_bits_lsb = np.asarray(b_bits_lsb, dtype=np.int8).reshape(-1)
     if a_bits_lsb.size != b_bits_lsb.size:
@@ -89,11 +106,30 @@ def run_episode_record_serial_adder(
     d_period: int,
     rng: np.random.Generator,
     input_locations: np.ndarray,
-    reg: Optional[SVC] = None,
+    reg: Optional[Readout] = None,
     collect_states: bool = True,
     x0_mode: str = "zeros",
 ) -> dict:
-    """Run one serial-adder episode and (optionally) score with a readout."""
+    """Run one serial-adder episode and optionally score with a readout.
+
+    Args:
+        a: Integer A (0 <= a < 2**bits).
+        b: Integer B (0 <= b < 2**bits).
+        bits: Bit-width for A and B.
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        itr: Number of iterations between ticks.
+        d_period: Distractor length in input ticks.
+        rng: NumPy random generator.
+        input_locations: Injection locations array.
+        reg: Optional trained readout model for predictions.
+        collect_states: Whether to store the full state history.
+        x0_mode: Initial state mode ("zeros" or "random").
+
+    Returns:
+        dict: Episode data including inputs, features, predictions, and states.
+    """
     rule = eca_rule_lkt(rule_number)
 
     a_bits_lsb = int_to_bits_lsb(a, bits)
@@ -174,7 +210,23 @@ def build_dataset_serial_adder(
     d_period: int,
     seed: int = 0,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Build a dataset from random N-bit addition problems."""
+    """Build a dataset from random N-bit addition problems.
+
+    Args:
+        bits: Bit-width of the adder.
+        n_samples: Number of samples to generate.
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Distractor length in input ticks.
+        seed: RNG seed for dataset generation.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray]: Feature matrix, labels,
+        and input locations.
+    """
     rng = np.random.default_rng(seed)
     input_locations = create_input_locations(width, recurrence, N_CHANNELS, rng)
 

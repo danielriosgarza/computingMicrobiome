@@ -1,0 +1,25 @@
+site_name: computingMicrobiome
+site_description: Elementary cellular automata reservoir computing benchmarks.
+
+theme:
+  name: material
+
+nav:
+  - Home: index.md
+  - CLI: cli.md
+  - API Reference: api.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: false
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences

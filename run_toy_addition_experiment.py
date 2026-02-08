@@ -1,4 +1,4 @@
-from computingMicrobiome.experiments.run_toy_addition_experiment import main
+from experiments.run_toy_addition_experiment import main
 
 
 if __name__ == "__main__":

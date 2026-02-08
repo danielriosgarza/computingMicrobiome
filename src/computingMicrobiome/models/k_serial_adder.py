@@ -1,23 +1,38 @@
+"""Serial adder classifier model."""
+
 from __future__ import annotations
 
 from typing import Sequence, Tuple
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.svm import SVC
 
 from ..benchmarks.k_serial_adder_bm import (
     build_dataset_serial_adder,
     run_episode_record_serial_adder,
 )
+from ..readouts.base import Readout
+from ..readouts.factory import make_readout
 
 
 class KSerialAdder(BaseEstimator, ClassifierMixin):
     """Serial adder classifier that predicts each output bit at cue ticks.
 
-    Call pattern:
-        model.predict([a0, a1, ...], [b0, b1, ...])
-        model.predict([("0110", "0011"), ("0001", "0001")])
+    Inputs can be integers or bitstrings of length `bits`.
+
+    Args:
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition ("periodic", "fixed_zero", "fixed_one",
+            "mirror", or "random").
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Delay between input and output window.
+        bits: Bit-width of the adder.
+        n_train: Number of training samples.
+        seed: RNG seed for dataset generation and sampling.
+        readout_kind: "svm" or "evo".
+        readout_config: Optional configuration for the readout.
     """
 
     def __init__(
@@ -31,6 +46,8 @@ class KSerialAdder(BaseEstimator, ClassifierMixin):
         bits: int = 8,
         n_train: int = 500,
         seed: int = 0,
+        readout_kind: str = "svm",
+        readout_config: dict | None = None,
     ):
         self.rule_number = int(rule_number)
         self.width = int(width)
@@ -41,11 +58,22 @@ class KSerialAdder(BaseEstimator, ClassifierMixin):
         self.bits = int(bits)
         self.n_train = int(n_train)
         self.seed = int(seed)
+        self.readout_kind = str(readout_kind)
+        self.readout_config = readout_config
 
-        self.reg_: SVC | None = None
+        self.reg_: Readout | None = None
         self.input_locations_: np.ndarray | None = None
 
     def fit(self, X=None, y=None):
+        """Fit the classifier using randomly sampled training pairs.
+
+        Args:
+            X: Ignored (present for sklearn API compatibility).
+            y: Ignored (present for sklearn API compatibility).
+
+        Returns:
+            KSerialAdder: Fitted estimator.
+        """
         X_train, y_train, input_locations = build_dataset_serial_adder(
             bits=self.bits,
             n_samples=self.n_train,
@@ -57,7 +85,8 @@ class KSerialAdder(BaseEstimator, ClassifierMixin):
             d_period=self.d_period,
             seed=self.seed,
         )
-        self.reg_ = SVC(kernel="linear")
+        rng = np.random.default_rng(self.seed)
+        self.reg_ = make_readout(self.readout_kind, self.readout_config, rng=rng)
         self.reg_.fit(X_train, y_train)
         self.input_locations_ = input_locations
         return self
@@ -83,6 +112,15 @@ class KSerialAdder(BaseEstimator, ClassifierMixin):
         return iv
 
     def predict(self, A, B=None):
+        """Predict summed bits for pairs of inputs.
+
+        Args:
+            A: Sequence of integers or bitstrings, or array of shape (n, 2).
+            B: Optional sequence of integers or bitstrings (paired with A).
+
+        Returns:
+            np.ndarray: Predicted sum bits of shape (n_samples, bits).
+        """
         if self.reg_ is None or self.input_locations_ is None:
             raise RuntimeError("Model not fitted: call fit() before predict().")
 

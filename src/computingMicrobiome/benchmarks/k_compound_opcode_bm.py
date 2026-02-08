@@ -20,10 +20,10 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 import numpy as np
-from sklearn.svm import SVC
-
 from ..eca import eca_rule_lkt, eca_step
 from ..utils import create_input_locations, flatten_history
+from ..readouts.base import Readout
+from ..readouts.factory import make_readout
 
 
 # -----------------------------
@@ -66,15 +66,28 @@ VAL_CHANNELS = [VAL_0, VAL_1]
 
 
 def opcode_to_int(op_bits_msb_first: np.ndarray) -> int:
-    """Convert 4 opcode bits in MSB-first order [op3, op2, op1, op0] to int 0..15."""
+    """Convert MSB-first opcode bits to an integer in [0, 15].
+
+    Args:
+        op_bits_msb_first: Array of shape (4,) in order [op3, op2, op1, op0].
+
+    Returns:
+        int: Opcode integer in [0, 15].
+    """
     b = op_bits_msb_first.astype(int).tolist()
     return (b[0] << 3) | (b[1] << 2) | (b[2] << 1) | b[3]
 
 
 def apply_opcode(op_bits_msb_first: np.ndarray, x: int, y: int) -> int:
-    """Apply the opcode-selected Boolean operation and return 0/1.
+    """Apply the opcode-selected Boolean operation.
 
-    Truth table order: (x,y) = 00, 01, 10, 11.
+    Args:
+        op_bits_msb_first: Array of shape (4,) in order [op3, op2, op1, op0].
+        x: Operand bit (0 or 1).
+        y: Operand bit (0 or 1).
+
+    Returns:
+        int: Result bit (0 or 1).
     """
     op = opcode_to_int(op_bits_msb_first)
     x = int(x) & 1
@@ -90,13 +103,32 @@ def apply_compound_opcode(
     op2_bits_msb_first: np.ndarray,
     c: int,
 ) -> int:
-    """Compute y = f_op2(f_op1(a,b), c)."""
+    """Compute compound output y = f_op2(f_op1(a, b), c).
+
+    Args:
+        op1_bits_msb_first: Opcode bits for op1 (shape (4,)).
+        a: Operand bit (0 or 1).
+        b: Operand bit (0 or 1).
+        op2_bits_msb_first: Opcode bits for op2 (shape (4,)).
+        c: Operand bit (0 or 1).
+
+    Returns:
+        int: Result bit (0 or 1).
+    """
     y1 = apply_opcode(op1_bits_msb_first, a, b)
     return apply_opcode(op2_bits_msb_first, y1, c)
 
 
 def make_packet(tag_channel: int, value: int) -> np.ndarray:
-    """Create one 15-channel packet with given tag channel and bit value."""
+    """Create a single tagged packet.
+
+    Args:
+        tag_channel: Tag channel index.
+        value: Bit value (0 or 1).
+
+    Returns:
+        np.ndarray: Packet of shape (15,) with dtype int8.
+    """
     pkt = np.zeros(N_CHANNELS, dtype=np.int8)
     pkt[tag_channel] = 1
     if int(value) == 0:
@@ -115,10 +147,19 @@ def build_tagged_stream(
     d_period: int,
     repeats: int = 1,
 ) -> np.ndarray:
-    """Build the input stream of shape (L, 15).
+    """Build the tagged input stream for a compound opcode episode.
 
-    Fixed write order:
-      op1 bits (op1_0..op1_3), a, b, op2 bits (op2_0..op2_3), c
+    Args:
+        op1_bits_msb_first: Opcode bits for op1 (shape (4,)).
+        a: Operand bit (0 or 1).
+        b: Operand bit (0 or 1).
+        op2_bits_msb_first: Opcode bits for op2 (shape (4,)).
+        c: Operand bit (0 or 1).
+        d_period: Distractor length in input ticks.
+        repeats: Number of times to repeat the write packets.
+
+    Returns:
+        np.ndarray: Stream of shape (L, 15).
     """
     op1_bits_msb_first = np.asarray(op1_bits_msb_first, dtype=np.int8).reshape(-1)
     op2_bits_msb_first = np.asarray(op2_bits_msb_first, dtype=np.int8).reshape(-1)
@@ -193,18 +234,36 @@ def run_episode_record_tagged(
     rng: np.random.Generator,
     input_locations: np.ndarray,
     repeats: int = 1,
-    reg: Optional[SVC] = None,
+    reg: Optional[Readout] = None,
     collect_states: bool = True,
     x0_mode: str = "zeros",
     feature_mode: str = "cue_tick",
     output_window: int = 2,
 ) -> dict:
-    """Run one compound-opcode episode and (optionally) score with a readout.
+    """Run one compound-opcode episode and optionally score with a readout.
 
-    feature_mode:
-      - "cue_tick": use features at the cue tick only (one sample per episode)
-      - "output_window": use concatenated features over the last `output_window` ticks
-                         (returns X_out shape (output_window, itr*width))
+    Args:
+        op1_bits_msb_first: Opcode bits for op1 (shape (4,)).
+        a: Operand bit (0 or 1).
+        b: Operand bit (0 or 1).
+        op2_bits_msb_first: Opcode bits for op2 (shape (4,)).
+        c: Operand bit (0 or 1).
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        itr: Number of iterations between ticks.
+        d_period: Distractor length in input ticks.
+        rng: NumPy random generator.
+        input_locations: Injection locations array.
+        repeats: Number of times to repeat the write packets.
+        reg: Optional trained readout model for predictions.
+        collect_states: Whether to store the full state history.
+        x0_mode: Initial state mode ("zeros" or "random").
+        feature_mode: "cue_tick" or "output_window".
+        output_window: Window length when feature_mode is "output_window".
+
+    Returns:
+        dict: Episode data including inputs, features, predictions, and states.
     """
     rule = eca_rule_lkt(rule_number)
 
@@ -304,7 +363,24 @@ def build_dataset_compound_opcode(
     output_window: int = 2,
     seed: int = 0,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Enumerate all combinations and return (X, y, input_locations)."""
+    """Build a dataset for the compound-opcode task.
+
+    Args:
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Distractor length in input ticks.
+        repeats: Number of times to repeat write packets.
+        feature_mode: "cue_tick" or "output_window".
+        output_window: Window length when feature_mode is "output_window".
+        seed: RNG seed for dataset generation.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray]: Feature matrix, labels,
+        and input locations.
+    """
     rng = np.random.default_rng(seed)
     input_locations = create_input_locations(width, recurrence, N_CHANNELS, rng)
 
@@ -372,8 +448,28 @@ def train_compound_opcode_readout(
     feature_mode: str = "cue_tick",
     output_window: int = 2,
     seed_train: int = 0,
-) -> Tuple[SVC, np.ndarray]:
-    """Train a linear SVM readout for the compound-opcode task."""
+    readout_kind: str = "svm",
+    readout_config: Optional[dict] = None,
+) -> Tuple[Readout, np.ndarray]:
+    """Train a linear readout for the compound-opcode task.
+
+    Args:
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition.
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Distractor length in input ticks.
+        repeats: Number of times to repeat write packets.
+        feature_mode: "cue_tick" or "output_window".
+        output_window: Window length when feature_mode is "output_window".
+        seed_train: RNG seed for training data.
+        readout_kind: "svm" or "evo".
+        readout_config: Optional configuration for the readout.
+
+    Returns:
+        Tuple[Readout, np.ndarray]: Trained classifier and input locations.
+    """
     X, y, input_locations = build_dataset_compound_opcode(
         rule_number=rule_number,
         width=width,
@@ -386,6 +482,7 @@ def train_compound_opcode_readout(
         output_window=output_window,
         seed=seed_train,
     )
-    reg = SVC(kernel="linear")
+    rng = np.random.default_rng(seed_train)
+    reg = make_readout(readout_kind, readout_config, rng=rng)
     reg.fit(X, y)
     return reg, input_locations

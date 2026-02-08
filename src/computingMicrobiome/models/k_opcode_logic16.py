@@ -1,25 +1,37 @@
+"""Programmable 4-bit opcode logic classifier."""
+
 from __future__ import annotations
 
 from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.svm import SVC
 import numpy as np
 
 from ..benchmarks.k_opcode_logic16_bm import (
     train_programmed_logic_readout,
     run_episode_record_tagged,
 )
+from ..readouts.base import Readout
 
 
 class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
-    """Programmable logic gate with 4-bit opcode + 2 operand bits.
+    """Programmable logic gate with a 4-bit opcode and 2 operand bits.
 
-    Call pattern:
-        alu.predict([[op3, op2, op1, op0, a, b], ...])
+    The opcode encodes the truth table for f(a, b) with ordering:
+    (a, b) = 00, 01, 10, 11, where op0 is output for 00 and op3 for 11.
 
-    Opcode bits are MSB-first (op3 op2 op1 op0).
-    The opcode encodes the full truth table for f(a, b) with ordering:
-        (a,b) = 00, 01, 10, 11
-    op0 is the output for 00, op1 for 01, op2 for 10, op3 for 11.
+    Args:
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition ("periodic", "fixed_zero", "fixed_one",
+            "mirror", or "random").
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Delay between input and output window.
+        repeats: Number of episode repeats per sample.
+        feature_mode: Feature extraction mode ("cue_tick" or "window").
+        output_window: Output window length when using windowed features.
+        seed: RNG seed for dataset generation and sampling.
+        readout_kind: "svm" or "evo".
+        readout_config: Optional configuration for the readout.
     """
 
     def __init__(
@@ -34,6 +46,8 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
         feature_mode: str = "cue_tick",
         output_window: int = 2,
         seed: int = 0,
+        readout_kind: str = "svm",
+        readout_config: dict | None = None,
     ):
         self.rule_number = int(rule_number)
         self.width = int(width)
@@ -45,12 +59,22 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
         self.feature_mode = str(feature_mode)
         self.output_window = int(output_window)
         self.seed = int(seed)
+        self.readout_kind = str(readout_kind)
+        self.readout_config = readout_config
 
-        self.reg_: SVC | None = None
+        self.reg_: Readout | None = None
         self.input_locations_: np.ndarray | None = None
 
     def fit(self, X=None, y=None):
-        # Train on full 64-case truth table.
+        """Fit the classifier using the full 64-case truth table.
+
+        Args:
+            X: Ignored (present for sklearn API compatibility).
+            y: Ignored (present for sklearn API compatibility).
+
+        Returns:
+            KOpcodeLogic16: Fitted estimator.
+        """
         self.reg_, self.input_locations_ = train_programmed_logic_readout(
             rule_number=self.rule_number,
             width=self.width,
@@ -63,10 +87,21 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
             output_window=self.output_window,
             seed_train=self.seed,
             order=None,
+            readout_kind=self.readout_kind,
+            readout_config=self.readout_config,
         )
         return self
 
     def predict(self, X):
+        """Predict logic outputs for opcode/operand inputs.
+
+        Args:
+            X: Array-like of shape (n_samples, 6) with
+                [op3, op2, op1, op0, a, b] per row.
+
+        Returns:
+            np.ndarray: Predicted outputs of shape (n_samples,).
+        """
         if self.reg_ is None or self.input_locations_ is None:
             raise RuntimeError("Model not fitted: call fit() before predict().")
 

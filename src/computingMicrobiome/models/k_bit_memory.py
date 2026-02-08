@@ -1,3 +1,5 @@
+"""K-bit memory classifier model."""
+
 from sklearn.base import BaseEstimator, ClassifierMixin
 import numpy as np
 
@@ -5,9 +7,26 @@ from ..benchmarks.k_bit_memory_bm import (
     train_memory_readout,
     run_episode_record,
 )
+from ..readouts.base import Readout
 
 
 class KBitMemory(BaseEstimator, ClassifierMixin):
+    """Memory-only task for k-bit recall using an ECA reservoir.
+
+    Args:
+        bits: Number of bits to store and recall.
+        rule_number: ECA rule number (0-255).
+        width: Number of cells in the automaton.
+        boundary: Boundary condition ("periodic", "fixed_zero", "fixed_one",
+            "mirror", or "random").
+        recurrence: Number of input segments for injection.
+        itr: Number of iterations between ticks.
+        d_period: Delay between input and recall window.
+        seed: RNG seed for dataset generation and sampling.
+        readout_kind: "svm" or "evo".
+        readout_config: Optional configuration for the readout.
+    """
+
     def __init__(
         self,
         bits: int,
@@ -18,6 +37,8 @@ class KBitMemory(BaseEstimator, ClassifierMixin):
         itr: int,
         d_period: int,
         seed: int = 0,
+        readout_kind: str = "svm",
+        readout_config: dict | None = None,
     ):
         self.bits = bits
         self.rule_number = rule_number
@@ -27,11 +48,21 @@ class KBitMemory(BaseEstimator, ClassifierMixin):
         self.itr = itr
         self.d_period = d_period
         self.seed = seed
+        self.readout_kind = str(readout_kind)
+        self.readout_config = readout_config
+
+        self.reg_: Readout | None = None
+        self.input_locations_: np.ndarray | None = None
 
     def fit(self, X=None, y=None):
-        """
-        Train the KBitMemory model.
-        This will train a linear readout on the output of the ECA.
+        """Fit the linear readout using the memory benchmark dataset.
+
+        Args:
+            X: Ignored (present for sklearn API compatibility).
+            y: Ignored (present for sklearn API compatibility).
+
+        Returns:
+            KBitMemory: Fitted estimator.
         """
         self.reg_, self.input_locations_ = train_memory_readout(
             self.bits,
@@ -42,15 +73,24 @@ class KBitMemory(BaseEstimator, ClassifierMixin):
             self.itr,
             self.d_period,
             seed_train=self.seed,
+            readout_kind=self.readout_kind,
+            readout_config=self.readout_config,
         )
         return self
 
     def predict(self, X):
-        """
-        Predict the output for a given set of k-bit strings.
-        X should be a 2D numpy array of shape (n_samples, n_bits).
+        """Predict recalled bits for a batch of inputs.
+
+        Args:
+            X: Array-like of shape (n_samples, n_bits) with input bit vectors.
+
+        Returns:
+            np.ndarray: Predicted bit vectors of shape (n_samples, bits).
         """
         y_pred = []
+        if self.reg_ is None or self.input_locations_ is None:
+            raise RuntimeError("Model not fitted: call fit() before predict().")
+
         rng = np.random.default_rng(self.seed)
 
         for bits_arr in X:

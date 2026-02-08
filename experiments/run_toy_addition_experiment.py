@@ -1,6 +1,8 @@
+"""CLI entry point for the toy addition experiment."""
+
 import argparse
 
-from .toy_addition_experiment import (
+from experiments.toy_addition_experiment import (
     build_reservoir_dataset,
     enumerate_addition_dataset,
     evaluate_models,
@@ -10,6 +12,12 @@ from .toy_addition_experiment import (
 
 
 def _print_results(label: str, res: dict) -> None:
+    """Print experiment results to stdout.
+
+    Args:
+        label: Label for the result block.
+        res: Result dictionary from evaluate_models.
+    """
     per_bit = res["per_bit"]
     full_acc = res["full_acc"]
     full_correct = res["full_correct"]
@@ -22,6 +30,7 @@ def _print_results(label: str, res: dict) -> None:
 
 
 def main() -> None:
+    """Run the toy addition experiment from the command line."""
     parser = argparse.ArgumentParser(description="Toy addition experiment")
     parser.add_argument("--n_bits", type=int, default=3)
     parser.add_argument("--cin", type=int, default=0)
