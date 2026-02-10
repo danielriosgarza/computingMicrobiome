@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, List
+from typing import Callable, Iterable, List
 
 import numpy as np
 
@@ -27,6 +27,39 @@ LearnerFactory = Callable[[], LearnerProtocol]
 class MoranEvolutionEngine:
     """Outer-loop Moran-style evolutionary engine."""
 
+    @staticmethod
+    def _make_generation_iterator(
+        generations: int,
+        *,
+        progress: bool,
+        progress_mode: str,
+        progress_desc: str,
+    ) -> tuple[Iterable[int], object | None, bool]:
+        """Build generation iterator with optional progress UI.
+
+        Returns:
+            (iterator, progress_bar_object, use_print_progress)
+        """
+        if not progress:
+            return range(generations), None, False
+
+        mode = progress_mode.strip().lower()
+        if mode not in {"auto", "tqdm", "print"}:
+            raise ValueError("progress_mode must be one of: auto, tqdm, print")
+
+        if mode in {"auto", "tqdm"}:
+            try:
+                from tqdm.auto import tqdm  # type: ignore
+
+                bar = tqdm(range(generations), total=generations, desc=progress_desc)
+                return bar, bar, False
+            except Exception:
+                if mode == "tqdm":
+                    raise
+                return range(generations), None, True
+
+        return range(generations), None, True
+
     def run(
         self,
         task_sampler: TaskSamplerProtocol,
@@ -35,6 +68,11 @@ class MoranEvolutionEngine:
         evolution_config: EvolutionConfig,
         rng: np.random.Generator,
         initial_genotypes: List[object],
+        *,
+        progress: bool = False,
+        progress_mode: str = "auto",
+        progress_every: int = 10,
+        progress_desc: str = "Evolution",
     ) -> EvolutionRunResult:
         """Execute a full evolutionary run.
 
@@ -46,13 +84,22 @@ class MoranEvolutionEngine:
         pop_size = evolution_config.population_size
         if len(initial_genotypes) != pop_size:
             raise ValueError("initial_genotypes length must equal population_size")
+        if progress_every < 1:
+            raise ValueError("progress_every must be >= 1")
 
         individuals: List[IndividualState] = [
             IndividualState(id=i, genotype=initial_genotypes[i]) for i in range(pop_size)
         ]
         history: List[GenerationMetrics] = []
 
-        for g in range(evolution_config.generations):
+        iterator, progress_bar, use_print_progress = self._make_generation_iterator(
+            evolution_config.generations,
+            progress=progress,
+            progress_mode=progress_mode,
+            progress_desc=progress_desc,
+        )
+
+        for g in iterator:
             # 1) Draw shared support/challenge sets.
             raw_sup_x, _ = task_sampler.sample_support(rng, evolution_config.support_size)
             raw_ch_x, _ = task_sampler.sample_challenge(
@@ -134,6 +181,25 @@ class MoranEvolutionEngine:
                     replacement_rate=replacement_rate,
                 )
             )
+
+            if progress_bar is not None:
+                progress_bar.set_postfix(
+                    mean=f"{mean_fit:.3f}",
+                    best=f"{best_fit:.3f}",
+                    repl=f"{replacement_rate:.2f}",
+                )
+            elif use_print_progress and (
+                (g + 1) % progress_every == 0
+                or g == 0
+                or g == evolution_config.generations - 1
+            ):
+                print(
+                    f"[evolution] gen {g + 1}/{evolution_config.generations} "
+                    f"mean={mean_fit:.4f} best={best_fit:.4f} repl={replacement_rate:.3f}"
+                )
+
+        if progress_bar is not None:
+            progress_bar.close()
 
         best_idx = int(np.argmax([ind.fitness for ind in individuals]))
         best_genotype = individuals[best_idx].genotype

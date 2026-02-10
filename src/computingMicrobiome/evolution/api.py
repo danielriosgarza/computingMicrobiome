@@ -110,8 +110,20 @@ def run_evolution_of_learners(
     representation_params: Dict[str, Any] | None = None,
     learner_params: Dict[str, Any] | None = None,
     evolution_params: Dict[str, Any] | None = None,
+    progress: bool = False,
+    progress_mode: str = "auto",
+    progress_every: int = 10,
 ) -> EvolutionRunResult:
-    """High-level entry point for running an evolution-of-learners experiment."""
+    """High-level entry point for running an evolution-of-learners experiment.
+
+    Args:
+        progress: If True, show run progress.
+        progress_mode: One of {"auto", "tqdm", "print"}.
+            - "auto": use tqdm if available, otherwise print.
+            - "tqdm": require tqdm and show a progress bar.
+            - "print": periodic text progress.
+        progress_every: Generation interval for text progress when using print mode.
+    """
     if engine != "moran":
         raise ValueError(f"Unsupported engine: {engine!r}")
 
@@ -161,6 +173,9 @@ def run_evolution_of_learners(
         evolution_config=evo_cfg,
         rng=rng,
         initial_genotypes=initial_genotypes,
+        progress=progress,
+        progress_mode=progress_mode,
+        progress_every=progress_every,
     )
 
     exp_cfg = ExperimentConfig(
