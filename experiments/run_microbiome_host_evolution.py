@@ -51,6 +51,9 @@ def main() -> None:
         choices=["auto", "tqdm", "print"],
     )
     parser.add_argument("--progress_every", type=int, default=10)
+    parser.add_argument("--no_inner_progress", action="store_true")
+    parser.add_argument("--inner_progress_every", type=int, default=5)
+    parser.add_argument("--no_dataset_cache", action="store_true")
     parser.add_argument("--out", type=str, default="artifacts/microbiome_evolution_result.json")
     args = parser.parse_args()
 
@@ -141,6 +144,9 @@ def main() -> None:
         progress=args.progress,
         progress_mode=args.progress_mode,
         progress_every=args.progress_every,
+        inner_progress=not args.no_inner_progress,
+        inner_progress_every=args.inner_progress_every,
+        use_dataset_cache=not args.no_dataset_cache,
     )
 
     out_path = Path(args.out)

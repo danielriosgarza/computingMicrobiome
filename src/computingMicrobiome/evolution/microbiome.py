@@ -113,6 +113,42 @@ def _build_dataset_for_individual(
     return np.asarray(X), np.asarray(y)
 
 
+def _freeze_for_key(value: Any) -> Any:
+    """Convert nested objects to hashable, deterministic structures."""
+    if isinstance(value, Mapping):
+        return tuple(sorted((k, _freeze_for_key(v)) for k, v in value.items()))
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_for_key(v) for v in value)
+    if isinstance(value, np.ndarray):
+        return ("ndarray", str(value.dtype), tuple(value.shape), tuple(value.reshape(-1).tolist()))
+    if isinstance(value, (np.integer, np.floating)):
+        return value.item()
+    return value
+
+
+def _build_dataset_cache_key(
+    *,
+    task: str,
+    source: str,
+    builder: DatasetBuilder,
+    base_kwargs: Mapping[str, Any],
+    ind: MicrobiomeIndividual,
+) -> tuple[Any, ...]:
+    kwargs = dict(base_kwargs)
+    if source == "reservoir":
+        kwargs["seed"] = int(ind.seed)
+        if ind.rule_number is not None:
+            kwargs["rule_number"] = int(ind.rule_number)
+    else:
+        kwargs["seed"] = int(ind.seed)
+    filtered = _filter_kwargs_for_callable(builder, kwargs)
+    return (
+        task,
+        source,
+        _freeze_for_key(filtered),
+    )
+
+
 def _sample_rows(
     X: np.ndarray,
     y: np.ndarray,
@@ -305,6 +341,9 @@ def run_microbiome_host_evolution(
     progress_mode: str = "auto",
     progress_every: int = 10,
     progress_desc: str = "Microbiome Evolution",
+    inner_progress: bool = True,
+    inner_progress_every: int = 5,
+    use_dataset_cache: bool = True,
 ) -> EvolutionRunResult:
     """Run host evolution with fixed-capacity learners and microbiome inheritance.
 
@@ -329,6 +368,9 @@ def run_microbiome_host_evolution(
         progress_mode: One of {"auto", "tqdm", "print"}.
         progress_every: Generation interval for text progress when using print mode.
         progress_desc: Progress bar label when tqdm mode is used.
+        inner_progress: If True, show per-host progress within each generation.
+        inner_progress_every: Host interval for text updates in print mode.
+        use_dataset_cache: If True, memoize built datasets by genotype/config.
 
     Returns:
         EvolutionRunResult: Generation history and final population summary.
@@ -341,6 +383,8 @@ def run_microbiome_host_evolution(
         raise ValueError("support_size and challenge_size must be >= 1")
     if progress_every < 1:
         raise ValueError("progress_every must be >= 1")
+    if inner_progress_every < 1:
+        raise ValueError("inner_progress_every must be >= 1")
     if source not in {"direct", "reservoir"}:
         raise ValueError("source must be 'direct' or 'reservoir'")
 
@@ -358,6 +402,9 @@ def run_microbiome_host_evolution(
 
     history: List[GenerationMetrics] = []
     final_fitness = np.zeros(population_size, dtype=float)
+    dataset_cache: Dict[tuple[Any, ...], tuple[np.ndarray, np.ndarray]] = {}
+    cache_hits = 0
+    cache_misses = 0
 
     iterator, progress_bar, use_print_progress = _make_generation_iterator(
         generations,
@@ -372,12 +419,42 @@ def run_microbiome_host_evolution(
         # Optional shared challenge indices per generation (for comparability).
         shared_idx = None
         if shared_challenge_across_population:
-            X0, y0 = _build_dataset_for_individual(builder, base_kwargs, source, population[0])
+            key0 = _build_dataset_cache_key(
+                task=task,
+                source=source,
+                builder=builder,
+                base_kwargs=base_kwargs,
+                ind=population[0],
+            )
+            if use_dataset_cache and key0 in dataset_cache:
+                X0, y0 = dataset_cache[key0]
+                cache_hits += 1
+            else:
+                X0, y0 = _build_dataset_for_individual(
+                    builder, base_kwargs, source, population[0]
+                )
+                if use_dataset_cache:
+                    dataset_cache[key0] = (X0, y0)
+                cache_misses += 1
             challenge_take = min(challenge_size, X0.shape[0])
             shared_idx = rng.choice(X0.shape[0], size=challenge_take, replace=False)
 
         for i, ind in enumerate(population):
-            X, y = _build_dataset_for_individual(builder, base_kwargs, source, ind)
+            key = _build_dataset_cache_key(
+                task=task,
+                source=source,
+                builder=builder,
+                base_kwargs=base_kwargs,
+                ind=ind,
+            )
+            if use_dataset_cache and key in dataset_cache:
+                X, y = dataset_cache[key]
+                cache_hits += 1
+            else:
+                X, y = _build_dataset_for_individual(builder, base_kwargs, source, ind)
+                if use_dataset_cache:
+                    dataset_cache[key] = (X, y)
+                cache_misses += 1
             fitness[i] = _evaluate_individual(
                 X,
                 y,
@@ -389,6 +466,24 @@ def run_microbiome_host_evolution(
                 rng=rng,
                 shared_challenge_idx=shared_idx,
             )
+            if inner_progress:
+                if progress_bar is not None:
+                    total_cache = cache_hits + cache_misses
+                    cache_rate = cache_hits / total_cache if total_cache > 0 else 0.0
+                    progress_bar.set_postfix(
+                        gen=f"{gen + 1}/{generations}",
+                        host=f"{i + 1}/{population_size}",
+                        cache=f"{cache_rate:.2f}",
+                    )
+                elif use_print_progress and (
+                    (i + 1) % inner_progress_every == 0
+                    or i == 0
+                    or i == population_size - 1
+                ):
+                    print(
+                        f"[microbiome] gen {gen + 1}/{generations} "
+                        f"host {i + 1}/{population_size}"
+                    )
 
         final_fitness = fitness.copy()
 
@@ -419,10 +514,13 @@ def run_microbiome_host_evolution(
         )
 
         if progress_bar is not None:
+            total_cache = cache_hits + cache_misses
+            cache_rate = cache_hits / total_cache if total_cache > 0 else 0.0
             progress_bar.set_postfix(
                 mean=f"{history[-1].mean_fitness:.3f}",
                 best=f"{history[-1].best_fitness:.3f}",
                 repl=f"{history[-1].replacement_rate:.2f}",
+                cache=f"{cache_rate:.2f}",
             )
         elif use_print_progress and (
             (gen + 1) % progress_every == 0 or gen == 0 or gen == generations - 1
