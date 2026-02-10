@@ -12,7 +12,7 @@ the host-microbiome framing:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from inspect import signature
+from inspect import Parameter, signature
 from typing import Any, Callable, Dict, List, Mapping
 
 import numpy as np
@@ -76,6 +76,8 @@ class MicrobiomeIndividual:
 
 def _filter_kwargs_for_callable(fn: Callable[..., Any], kwargs: Mapping[str, Any]) -> dict:
     params = signature(fn).parameters
+    if any(p.kind == Parameter.VAR_KEYWORD for p in params.values()):
+        return dict(kwargs)
     return {k: v for k, v in kwargs.items() if k in params}
 
 
