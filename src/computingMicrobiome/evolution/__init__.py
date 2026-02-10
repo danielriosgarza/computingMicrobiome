@@ -11,6 +11,7 @@ from .base import (
 from .config import EvolutionConfig, ExperimentConfig, LearnerConfig
 from .engines import MoranEvolutionEngine
 from .learners import PerceptronGenotype, PerceptronLearner
+from .microbiome import run_microbiome_host_evolution
 from .results import EvolutionRunResult
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "PerceptronLearner",
     "PerceptronGenotype",
     "EvolutionRunResult",
+    "run_microbiome_host_evolution",
     "TaskSamplerProtocol",
     "RepresentationProtocol",
     "LearnerProtocol",

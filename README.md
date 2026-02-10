@@ -52,6 +52,7 @@ and can be run with:
 ```bash
 python -m experiments.run_toy_addition_experiment
 python -m experiments.compare_readouts
+python -m experiments.run_microbiome_host_evolution
 ```
 
 Meta-evolutionary readout example (train, freeze, save, reload):
