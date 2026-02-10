@@ -43,6 +43,14 @@ def main() -> None:
     )
     parser.add_argument("--mutate_rule_prob", type=float, default=0.0)
     parser.add_argument("--mutate_seed_prob", type=float, default=0.2)
+    parser.add_argument("--progress", action="store_true")
+    parser.add_argument(
+        "--progress_mode",
+        type=str,
+        default="auto",
+        choices=["auto", "tqdm", "print"],
+    )
+    parser.add_argument("--progress_every", type=int, default=10)
     parser.add_argument("--out", type=str, default="artifacts/microbiome_evolution_result.json")
     args = parser.parse_args()
 
@@ -130,6 +138,9 @@ def main() -> None:
         mutate_rule_prob=args.mutate_rule_prob,
         mutate_seed_prob=args.mutate_seed_prob,
         seed=args.seed,
+        progress=args.progress,
+        progress_mode=args.progress_mode,
+        progress_every=args.progress_every,
     )
 
     out_path = Path(args.out)
@@ -143,4 +154,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

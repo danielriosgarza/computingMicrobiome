@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from inspect import Parameter, signature
-from typing import Any, Callable, Dict, List, Mapping
+from typing import Any, Callable, Dict, Iterable, List, Mapping
 
 import numpy as np
 
@@ -256,6 +256,35 @@ def _mutate_individual(
     return child
 
 
+def _make_generation_iterator(
+    generations: int,
+    *,
+    progress: bool,
+    progress_mode: str,
+    progress_desc: str,
+) -> tuple[Iterable[int], object | None, bool]:
+    """Build generation iterator with optional progress UI."""
+    if not progress:
+        return range(generations), None, False
+
+    mode = progress_mode.strip().lower()
+    if mode not in {"auto", "tqdm", "print"}:
+        raise ValueError("progress_mode must be one of: auto, tqdm, print")
+
+    if mode in {"auto", "tqdm"}:
+        try:
+            from tqdm.auto import tqdm  # type: ignore
+
+            bar = tqdm(range(generations), total=generations, desc=progress_desc)
+            return bar, bar, False
+        except Exception:
+            if mode == "tqdm":
+                raise
+            return range(generations), None, True
+
+    return range(generations), None, True
+
+
 def run_microbiome_host_evolution(
     *,
     task: str,
@@ -272,6 +301,10 @@ def run_microbiome_host_evolution(
     mutate_rule_prob: float = 0.0,
     mutate_seed_prob: float = 0.2,
     seed: int = 0,
+    progress: bool = False,
+    progress_mode: str = "auto",
+    progress_every: int = 10,
+    progress_desc: str = "Microbiome Evolution",
 ) -> EvolutionRunResult:
     """Run host evolution with fixed-capacity learners and microbiome inheritance.
 
@@ -292,6 +325,10 @@ def run_microbiome_host_evolution(
         mutate_rule_prob: Per-offspring mutation probability for reservoir rule number.
         mutate_seed_prob: Per-offspring mutation probability for dataset seed.
         seed: Global RNG seed.
+        progress: If True, show run progress.
+        progress_mode: One of {"auto", "tqdm", "print"}.
+        progress_every: Generation interval for text progress when using print mode.
+        progress_desc: Progress bar label when tqdm mode is used.
 
     Returns:
         EvolutionRunResult: Generation history and final population summary.
@@ -302,6 +339,8 @@ def run_microbiome_host_evolution(
         raise ValueError("generations must be >= 1")
     if support_size < 1 or challenge_size < 1:
         raise ValueError("support_size and challenge_size must be >= 1")
+    if progress_every < 1:
+        raise ValueError("progress_every must be >= 1")
     if source not in {"direct", "reservoir"}:
         raise ValueError("source must be 'direct' or 'reservoir'")
 
@@ -320,7 +359,14 @@ def run_microbiome_host_evolution(
     history: List[GenerationMetrics] = []
     final_fitness = np.zeros(population_size, dtype=float)
 
-    for gen in range(generations):
+    iterator, progress_bar, use_print_progress = _make_generation_iterator(
+        generations,
+        progress=progress,
+        progress_mode=progress_mode,
+        progress_desc=progress_desc,
+    )
+
+    for gen in iterator:
         fitness = np.zeros(population_size, dtype=float)
 
         # Optional shared challenge indices per generation (for comparability).
@@ -371,7 +417,26 @@ def run_microbiome_host_evolution(
                 replacement_rate=replacement_rate,
             )
         )
+
+        if progress_bar is not None:
+            progress_bar.set_postfix(
+                mean=f"{history[-1].mean_fitness:.3f}",
+                best=f"{history[-1].best_fitness:.3f}",
+                repl=f"{history[-1].replacement_rate:.2f}",
+            )
+        elif use_print_progress and (
+            (gen + 1) % progress_every == 0 or gen == 0 or gen == generations - 1
+        ):
+            print(
+                f"[microbiome] gen {gen + 1}/{generations} "
+                f"mean={history[-1].mean_fitness:.4f} "
+                f"best={history[-1].best_fitness:.4f} "
+                f"repl={history[-1].replacement_rate:.3f}"
+            )
         population = new_population
+
+    if progress_bar is not None:
+        progress_bar.close()
 
     best_idx = int(np.argmax(final_fitness))
     best = population[best_idx]
