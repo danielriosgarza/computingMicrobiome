@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -21,6 +21,8 @@ class EvolutionRunResult:
     final_population_fitness: np.ndarray
     best_genotype: Dict[str, Any]
     seed: int
+    final_population_genotypes: List[Dict[str, Any]] = field(default_factory=list)
+    population_composition_history: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the result to a JSON-serialisable dictionary."""
@@ -30,6 +32,8 @@ class EvolutionRunResult:
             "final_population_fitness": self.final_population_fitness.tolist(),
             "best_genotype": self.best_genotype,
             "seed": self.seed,
+            "final_population_genotypes": self.final_population_genotypes,
+            "population_composition_history": self.population_composition_history,
         }
 
     def save_json(self, path: str | Path) -> None:

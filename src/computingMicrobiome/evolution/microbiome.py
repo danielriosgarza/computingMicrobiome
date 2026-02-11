@@ -381,6 +381,40 @@ def _build_initial_population(
     return population
 
 
+def _population_composition(population: list[MicrobiomeIndividual]) -> dict[str, Any]:
+    by_source: dict[str, int] = {}
+    by_rule: dict[str, int] = {}
+    by_source_rule: dict[str, dict[str, int]] = {}
+    for ind in population:
+        src = str(ind.source)
+        by_source[src] = by_source.get(src, 0) + 1
+        src_rules = by_source_rule.setdefault(src, {})
+        if ind.rule_number is None:
+            continue
+        rule_key = str(int(ind.rule_number))
+        by_rule[rule_key] = by_rule.get(rule_key, 0) + 1
+        src_rules[rule_key] = src_rules.get(rule_key, 0) + 1
+    return {
+        "by_source": dict(sorted(by_source.items())),
+        "by_rule": dict(sorted(by_rule.items(), key=lambda kv: int(kv[0]))),
+        "by_source_rule": {
+            src: dict(sorted(rules.items(), key=lambda kv: int(kv[0])))
+            for src, rules in sorted(by_source_rule.items())
+        },
+    }
+
+
+def _serialize_population(population: list[MicrobiomeIndividual]) -> list[dict[str, Any]]:
+    return [
+        {
+            "source": ind.source,
+            "rule_number": None if ind.rule_number is None else int(ind.rule_number),
+            "seed": int(ind.seed),
+        }
+        for ind in population
+    ]
+
+
 def run_microbiome_host_evolution(
     *,
     task: str,
@@ -473,6 +507,7 @@ def run_microbiome_host_evolution(
     )
 
     history: List[GenerationMetrics] = []
+    composition_history: List[dict[str, Any]] = []
     final_fitness = np.zeros(population_size, dtype=float)
     dataset_cache: Dict[tuple[Any, ...], tuple[np.ndarray, np.ndarray]] = {}
     cache_hits = 0
@@ -486,6 +521,9 @@ def run_microbiome_host_evolution(
     )
 
     for gen in iterator:
+        composition_history.append(
+            {"generation": int(gen), **_population_composition(population)}
+        )
         fitness = np.zeros(population_size, dtype=float)
 
         # Optional shared challenge indices per generation (for comparability).
@@ -634,6 +672,8 @@ def run_microbiome_host_evolution(
             "seed": int(best.seed),
         },
         seed=seed,
+        final_population_genotypes=_serialize_population(population),
+        population_composition_history=composition_history,
     )
 
 
