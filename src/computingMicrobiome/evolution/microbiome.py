@@ -16,6 +16,7 @@ from inspect import Parameter, signature
 from typing import Any, Callable, Dict, Iterable, List, Mapping
 
 import numpy as np
+from sklearn.linear_model import SGDClassifier
 
 from ..feature_sources import (
     build_direct_bit_memory_dataset,
@@ -218,6 +219,60 @@ def _fit_and_score_multilabel(
     )
 
 
+def _fit_and_score_mistake_driven_binary(
+    X_sup: np.ndarray,
+    y_sup: np.ndarray,
+    X_ch: np.ndarray,
+    y_ch: np.ndarray,
+    *,
+    learner_config: dict | None,
+    online_batch_size: int,
+    rng: np.random.Generator,
+) -> float:
+    if online_batch_size < 1:
+        raise ValueError("online_batch_size must be >= 1")
+
+    cfg = dict(learner_config or {})
+    alpha = float(cfg.get("alpha", 1e-4))
+    penalty = str(cfg.get("penalty", "l2"))
+    fit_intercept = bool(cfg.get("fit_intercept", True))
+
+    clf = SGDClassifier(
+        loss="hinge",
+        alpha=alpha,
+        penalty=penalty,
+        fit_intercept=fit_intercept,
+        random_state=int(rng.integers(0, 2**31 - 1)),
+        max_iter=1,
+        tol=None,
+    )
+
+    X_sup_arr = np.asarray(X_sup, dtype=float)
+    y_sup_arr = np.asarray(y_sup).reshape(-1).astype(np.int8)
+    X_ch_arr = np.asarray(X_ch, dtype=float)
+    y_ch_arr = np.asarray(y_ch).reshape(-1).astype(np.int8)
+
+    # Initial mini-batch fit: seed the learner with first experience.
+    clf.partial_fit(X_sup_arr, y_sup_arr, classes=np.array([0, 1], dtype=np.int8))
+
+    correct = 0
+    n = int(y_ch_arr.shape[0])
+    for start in range(0, n, online_batch_size):
+        stop = min(start + online_batch_size, n)
+        Xb = X_ch_arr[start:stop]
+        yb = y_ch_arr[start:stop]
+
+        # Prequential score: predict first, then update only on mistakes.
+        y_hat = clf.predict(Xb).astype(np.int8)
+        correct += int((y_hat == yb).sum())
+
+        mistakes = y_hat != yb
+        if mistakes.any():
+            clf.partial_fit(Xb[mistakes], yb[mistakes])
+
+    return float(correct / max(1, n))
+
+
 def _evaluate_individual(
     X: np.ndarray,
     y: np.ndarray,
@@ -227,6 +282,8 @@ def _evaluate_individual(
     learner_kind: str,
     learner_config: dict | None,
     fitness_metric: str,
+    incremental_mistake_updates: bool,
+    online_batch_size: int,
     rng: np.random.Generator,
     shared_challenge_idx: np.ndarray | None = None,
 ) -> float:
@@ -239,6 +296,16 @@ def _evaluate_individual(
         X_ch, y_ch = _sample_rows(X, y, challenge_size, rng)
 
     if y.ndim == 1:
+        if incremental_mistake_updates:
+            return _fit_and_score_mistake_driven_binary(
+                X_sup,
+                y_sup,
+                X_ch,
+                y_ch,
+                learner_config=learner_config,
+                online_batch_size=online_batch_size,
+                rng=rng,
+            )
         return _fit_and_score_binary(
             X_sup,
             y_sup,
@@ -249,6 +316,10 @@ def _evaluate_individual(
             rng=rng,
         )
     if y.ndim == 2:
+        if incremental_mistake_updates:
+            raise ValueError(
+                "incremental_mistake_updates currently supports only binary (1D) targets"
+            )
         return _fit_and_score_multilabel(
             X_sup,
             y_sup,
@@ -429,6 +500,8 @@ def run_microbiome_host_evolution(
     support_size: int = 128,
     challenge_size: int = 128,
     fitness_metric: str = "full_vector_accuracy",
+    incremental_mistake_updates: bool = False,
+    online_batch_size: int = 12,
     shared_challenge_across_population: bool = True,
     mutate_rule_prob: float = 0.0,
     mutate_seed_prob: float = 0.2,
@@ -461,6 +534,10 @@ def run_microbiome_host_evolution(
         support_size: Training rows sampled per host per generation.
         challenge_size: Evaluation rows sampled per host (or shared challenge size).
         fitness_metric: For 2D labels, "full_vector_accuracy" or "mean_bit_accuracy".
+        incremental_mistake_updates: If True, use prequential evaluation on challenge
+            rows and update only on prediction mistakes after an initial support fit.
+            Applies to binary tasks only.
+        online_batch_size: Challenge stream batch size for mistake-driven updates.
         shared_challenge_across_population: If True, all hosts use same challenge rows.
         mutate_rule_prob: Per-offspring mutation probability for reservoir rule number.
         mutate_seed_prob: Per-offspring mutation probability for dataset seed.
@@ -482,6 +559,8 @@ def run_microbiome_host_evolution(
         raise ValueError("generations must be >= 1")
     if support_size < 1 or challenge_size < 1:
         raise ValueError("support_size and challenge_size must be >= 1")
+    if online_batch_size < 1:
+        raise ValueError("online_batch_size must be >= 1")
     if progress_every < 1:
         raise ValueError("progress_every must be >= 1")
     if inner_progress_every < 1:
@@ -571,6 +650,8 @@ def run_microbiome_host_evolution(
                 learner_kind=learner_kind,
                 learner_config=l_cfg,
                 fitness_metric=fitness_metric,
+                incremental_mistake_updates=incremental_mistake_updates,
+                online_batch_size=online_batch_size,
                 rng=rng,
                 shared_challenge_idx=shared_idx_by_source.get(ind.source),
             )
@@ -660,6 +741,8 @@ def run_microbiome_host_evolution(
             "support_size": support_size,
             "challenge_size": challenge_size,
             "fitness_metric": fitness_metric,
+            "incremental_mistake_updates": incremental_mistake_updates,
+            "online_batch_size": online_batch_size,
             "shared_challenge_across_population": shared_challenge_across_population,
             "mutate_rule_prob": mutate_rule_prob,
             "mutate_seed_prob": mutate_seed_prob,

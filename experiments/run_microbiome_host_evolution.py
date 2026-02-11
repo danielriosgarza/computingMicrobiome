@@ -58,6 +58,8 @@ def main() -> None:
     parser.add_argument("--generations", type=int, default=20)
     parser.add_argument("--support_size", type=int, default=128)
     parser.add_argument("--challenge_size", type=int, default=128)
+    parser.add_argument("--incremental_mistake_updates", action="store_true")
+    parser.add_argument("--online_batch_size", type=int, default=12)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--rules",
@@ -172,6 +174,8 @@ def main() -> None:
         support_size=args.support_size,
         challenge_size=args.challenge_size,
         fitness_metric=args.fitness_metric,
+        incremental_mistake_updates=args.incremental_mistake_updates,
+        online_batch_size=args.online_batch_size,
         shared_challenge_across_population=True,
         mutate_rule_prob=args.mutate_rule_prob,
         mutate_seed_prob=args.mutate_seed_prob,
