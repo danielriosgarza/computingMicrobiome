@@ -321,11 +321,30 @@ def _make_generation_iterator(
     return range(generations), None, True
 
 
+def _normalize_initial_rules(
+    *,
+    source: str,
+    base_kwargs: Mapping[str, Any],
+    rules: Iterable[int] | None,
+) -> list[int] | None:
+    if source != "reservoir":
+        return None
+
+    if rules is None:
+        return [int(base_kwargs.get("rule_number", 110)) % 256]
+
+    normalized = [int(r) % 256 for r in rules]
+    if not normalized:
+        raise ValueError("rules must contain at least one rule number when provided")
+    return normalized
+
+
 def run_microbiome_host_evolution(
     *,
     task: str,
     source: str,
     dataset_kwargs: Mapping[str, Any] | None = None,
+    rules: Iterable[int] | None = None,
     learner_kind: str = "svm",
     learner_config: Mapping[str, Any] | None = None,
     population_size: int = 64,
@@ -353,6 +372,8 @@ def run_microbiome_host_evolution(
              "serial_adder", "toy_addition"}.
         source: "direct" (no reservoir) or "reservoir".
         dataset_kwargs: Task/builder kwargs (e.g. bits, n_samples, rule_number, ...).
+        rules: Optional initial reservoir rules. When provided, initial hosts are
+            assigned these rule values in near-equal counts across the population.
         learner_kind: Readout backend from readout factory (svm, evo, moran, ...).
         learner_config: Config passed to readout factory.
         population_size: Number of hosts in the population.
@@ -393,12 +414,21 @@ def run_microbiome_host_evolution(
     builder = _get_builder(task, source)
 
     rng = np.random.default_rng(seed)
-    init_rule = int(base_kwargs.get("rule_number", 110)) if source == "reservoir" else None
+    init_rules = _normalize_initial_rules(source=source, base_kwargs=base_kwargs, rules=rules)
 
-    population: List[MicrobiomeIndividual] = [
-        MicrobiomeIndividual(rule_number=init_rule, seed=int(rng.integers(0, 2**31 - 1)))
-        for _ in range(population_size)
-    ]
+    if init_rules is None:
+        population = [
+            MicrobiomeIndividual(rule_number=None, seed=int(rng.integers(0, 2**31 - 1)))
+            for _ in range(population_size)
+        ]
+    else:
+        # Build near-equal rule allocation, then shuffle to remove positional bias.
+        repeated_rules = [init_rules[i % len(init_rules)] for i in range(population_size)]
+        rng.shuffle(repeated_rules)
+        population = [
+            MicrobiomeIndividual(rule_number=rule, seed=int(rng.integers(0, 2**31 - 1)))
+            for rule in repeated_rules
+        ]
 
     history: List[GenerationMetrics] = []
     final_fitness = np.zeros(population_size, dtype=float)
@@ -544,6 +574,7 @@ def run_microbiome_host_evolution(
             "task": task,
             "source": source,
             "dataset_kwargs": base_kwargs,
+            "rules": list(init_rules) if init_rules is not None else None,
             "learner_kind": learner_kind,
             "learner_config": l_cfg,
             "population_size": population_size,

@@ -1,0 +1,202 @@
+{
+  "config": {
+    "bits": 8,
+    "width": 700,
+    "boundary": "periodic",
+    "recurrence": 4,
+    "itr": 2,
+    "d_period": 200,
+    "learner_kind": "svm",
+    "dataset_seed": 0,
+    "sweep_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "population_size": 20,
+    "outer_seed": 0
+  },
+  "fixed_seed_full_dataset": {
+    "rule90": {
+      "rule": 90,
+      "seed": 0,
+      "n_rows": 2048,
+      "acc": 1.0
+    },
+    "rule110": {
+      "rule": 110,
+      "seed": 0,
+      "n_rows": 2048,
+      "acc": 1.0
+    },
+    "delta_110_minus_90": 0.0
+  },
+  "seed_sweep_full_dataset": {
+    "rule90": {
+      "rule": 90,
+      "n_seeds": 10,
+      "mean_acc": 1.0,
+      "std_acc": 0.0,
+      "rows": [
+        {
+          "rule": 90,
+          "seed": 0,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 90,
+          "seed": 1,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 90,
+          "seed": 2,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 90,
+          "seed": 3,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 90,
+          "seed": 4,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 90,
+          "seed": 5,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 90,
+          "seed": 6,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 90,
+          "seed": 7,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 90,
+          "seed": 8,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 90,
+          "seed": 9,
+          "n_rows": 2048,
+          "acc": 1.0
+        }
+      ]
+    },
+    "rule110": {
+      "rule": 110,
+      "n_seeds": 10,
+      "mean_acc": 0.99853515625,
+      "std_acc": 0.0014810303601663184,
+      "rows": [
+        {
+          "rule": 110,
+          "seed": 0,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 110,
+          "seed": 1,
+          "n_rows": 2048,
+          "acc": 0.99609375
+        },
+        {
+          "rule": 110,
+          "seed": 2,
+          "n_rows": 2048,
+          "acc": 0.99609375
+        },
+        {
+          "rule": 110,
+          "seed": 3,
+          "n_rows": 2048,
+          "acc": 0.99853515625
+        },
+        {
+          "rule": 110,
+          "seed": 4,
+          "n_rows": 2048,
+          "acc": 0.9970703125
+        },
+        {
+          "rule": 110,
+          "seed": 5,
+          "n_rows": 2048,
+          "acc": 0.99951171875
+        },
+        {
+          "rule": 110,
+          "seed": 6,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 110,
+          "seed": 7,
+          "n_rows": 2048,
+          "acc": 0.9990234375
+        },
+        {
+          "rule": 110,
+          "seed": 8,
+          "n_rows": 2048,
+          "acc": 1.0
+        },
+        {
+          "rule": 110,
+          "seed": 9,
+          "n_rows": 2048,
+          "acc": 0.9990234375
+        }
+      ]
+    },
+    "delta_mean_110_minus_90": -0.00146484375
+  },
+  "population_one_generation_no_mutation": {
+    "rule90": {
+      "rule": 90,
+      "population_size": 20,
+      "outer_seed": 0,
+      "generation": 0,
+      "mean_fitness": 1.0,
+      "best_fitness": 1.0,
+      "std_fitness": 0.0
+    },
+    "rule110": {
+      "rule": 110,
+      "population_size": 20,
+      "outer_seed": 0,
+      "generation": 0,
+      "mean_fitness": 0.999267578125,
+      "best_fitness": 1.0,
+      "std_fitness": 0.0011708573054962693
+    },
+    "delta_mean_110_minus_90": -0.000732421875,
+    "delta_best_110_minus_90": 0.0
+  }
+}

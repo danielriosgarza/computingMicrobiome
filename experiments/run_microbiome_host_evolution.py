@@ -13,6 +13,16 @@ from pathlib import Path
 from computingMicrobiome.evolution import run_microbiome_host_evolution
 
 
+def _parse_rules_arg(raw: str | None) -> list[int] | None:
+    if raw is None:
+        return None
+    tokens = [tok.strip() for tok in raw.split(",")]
+    values = [int(tok) for tok in tokens if tok]
+    if not values:
+        raise ValueError("--rules must provide at least one comma-separated integer")
+    return values
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Microbiome host evolution")
     parser.add_argument(
@@ -34,6 +44,12 @@ def main() -> None:
     parser.add_argument("--support_size", type=int, default=128)
     parser.add_argument("--challenge_size", type=int, default=128)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--rules",
+        type=str,
+        default=None,
+        help="Comma-separated reservoir rules for initial population, e.g. 90,110",
+    )
     parser.add_argument("--learner_kind", type=str, default="svm")
     parser.add_argument(
         "--fitness_metric",
@@ -56,6 +72,7 @@ def main() -> None:
     parser.add_argument("--no_dataset_cache", action="store_true")
     parser.add_argument("--out", type=str, default="artifacts/microbiome_evolution_result.json")
     args = parser.parse_args()
+    rules = _parse_rules_arg(args.rules)
 
     # Conservative task defaults so the script runs out-of-the-box.
     dataset_kwargs = {
@@ -130,6 +147,7 @@ def main() -> None:
         task=args.task,
         source=args.source,
         dataset_kwargs=dataset_kwargs[args.task],
+        rules=rules,
         learner_kind=args.learner_kind,
         learner_config=None,
         population_size=args.population_size,
