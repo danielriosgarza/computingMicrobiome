@@ -23,6 +23,15 @@ def _parse_rules_arg(raw: str | None) -> list[int] | None:
     return values
 
 
+def _parse_sources_arg(raw: str | None) -> list[str] | None:
+    if raw is None:
+        return None
+    values = [tok.strip().lower() for tok in raw.split(",") if tok.strip()]
+    if not values:
+        raise ValueError("--sources must provide at least one comma-separated value")
+    return values
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Microbiome host evolution")
     parser.add_argument(
@@ -39,6 +48,12 @@ def main() -> None:
         ],
     )
     parser.add_argument("--source", type=str, default="reservoir", choices=["direct", "reservoir"])
+    parser.add_argument(
+        "--sources",
+        type=str,
+        default=None,
+        help="Optional comma-separated mixed sources for one population, e.g. direct,reservoir",
+    )
     parser.add_argument("--population_size", type=int, default=32)
     parser.add_argument("--generations", type=int, default=20)
     parser.add_argument("--support_size", type=int, default=128)
@@ -73,6 +88,7 @@ def main() -> None:
     parser.add_argument("--out", type=str, default="artifacts/microbiome_evolution_result.json")
     args = parser.parse_args()
     rules = _parse_rules_arg(args.rules)
+    sources = _parse_sources_arg(args.sources)
 
     # Conservative task defaults so the script runs out-of-the-box.
     dataset_kwargs = {
@@ -146,6 +162,7 @@ def main() -> None:
     result = run_microbiome_host_evolution(
         task=args.task,
         source=args.source,
+        sources=sources,
         dataset_kwargs=dataset_kwargs[args.task],
         rules=rules,
         learner_kind=args.learner_kind,

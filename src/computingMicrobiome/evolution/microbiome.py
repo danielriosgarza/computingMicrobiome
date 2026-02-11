@@ -70,6 +70,7 @@ _TASK_BUILDERS: Dict[str, Dict[str, DatasetBuilder]] = {
 class MicrobiomeIndividual:
     """Heritable microbiome proxy parameters for one host."""
 
+    source: str
     rule_number: int | None
     seed: int
 
@@ -94,13 +95,13 @@ def _get_builder(task: str, source: str) -> DatasetBuilder:
 
 
 def _build_dataset_for_individual(
-    builder: DatasetBuilder,
+    task: str,
     base_kwargs: Mapping[str, Any],
-    source: str,
     ind: MicrobiomeIndividual,
 ) -> tuple[np.ndarray, np.ndarray]:
+    builder = _get_builder(task, ind.source)
     kwargs = dict(base_kwargs)
-    if source == "reservoir":
+    if ind.source == "reservoir":
         kwargs["seed"] = int(ind.seed)
         if ind.rule_number is not None:
             kwargs["rule_number"] = int(ind.rule_number)
@@ -129,13 +130,12 @@ def _freeze_for_key(value: Any) -> Any:
 def _build_dataset_cache_key(
     *,
     task: str,
-    source: str,
-    builder: DatasetBuilder,
     base_kwargs: Mapping[str, Any],
     ind: MicrobiomeIndividual,
 ) -> tuple[Any, ...]:
+    builder = _get_builder(task, ind.source)
     kwargs = dict(base_kwargs)
-    if source == "reservoir":
+    if ind.source == "reservoir":
         kwargs["seed"] = int(ind.seed)
         if ind.rule_number is not None:
             kwargs["rule_number"] = int(ind.rule_number)
@@ -144,7 +144,7 @@ def _build_dataset_cache_key(
     filtered = _filter_kwargs_for_callable(builder, kwargs)
     return (
         task,
-        source,
+        ind.source,
         _freeze_for_key(filtered),
     )
 
@@ -274,14 +274,13 @@ def _fitness_proportional_weights(fitness: np.ndarray) -> np.ndarray:
 def _mutate_individual(
     ind: MicrobiomeIndividual,
     *,
-    source: str,
     mutate_rule_prob: float,
     mutate_seed_prob: float,
     rng: np.random.Generator,
 ) -> MicrobiomeIndividual:
-    child = MicrobiomeIndividual(rule_number=ind.rule_number, seed=int(ind.seed))
+    child = MicrobiomeIndividual(source=ind.source, rule_number=ind.rule_number, seed=int(ind.seed))
 
-    if source == "reservoir" and child.rule_number is not None:
+    if ind.source == "reservoir" and child.rule_number is not None:
         if rng.random() < mutate_rule_prob:
             step = int(rng.choice([-1, 1]))
             child.rule_number = int((child.rule_number + step) % 256)
@@ -323,11 +322,13 @@ def _make_generation_iterator(
 
 def _normalize_initial_rules(
     *,
-    source: str,
+    use_reservoir: bool,
     base_kwargs: Mapping[str, Any],
     rules: Iterable[int] | None,
 ) -> list[int] | None:
-    if source != "reservoir":
+    if not use_reservoir:
+        if rules is not None:
+            raise ValueError("rules can only be provided when using reservoir sources")
         return None
 
     if rules is None:
@@ -339,10 +340,52 @@ def _normalize_initial_rules(
     return normalized
 
 
+def _normalize_initial_sources(*, source: str, sources: Iterable[str] | None) -> list[str]:
+    if sources is None:
+        return [source]
+    normalized = [str(s).strip().lower() for s in sources if str(s).strip()]
+    if not normalized:
+        raise ValueError("sources must contain at least one value when provided")
+    for s in normalized:
+        if s not in {"direct", "reservoir"}:
+            raise ValueError("sources values must be 'direct' or 'reservoir'")
+    return normalized
+
+
+def _build_initial_population(
+    *,
+    population_size: int,
+    init_sources: list[str],
+    init_rules: list[int] | None,
+    rng: np.random.Generator,
+) -> list[MicrobiomeIndividual]:
+    repeated_sources = [init_sources[i % len(init_sources)] for i in range(population_size)]
+    rng.shuffle(repeated_sources)
+
+    population: list[MicrobiomeIndividual] = []
+    reservoir_count = 0
+    for src in repeated_sources:
+        rule = None
+        if src == "reservoir":
+            if not init_rules:
+                raise ValueError("Reservoir initialization requires at least one rule")
+            rule = int(init_rules[reservoir_count % len(init_rules)])
+            reservoir_count += 1
+        population.append(
+            MicrobiomeIndividual(
+                source=src,
+                rule_number=rule,
+                seed=int(rng.integers(0, 2**31 - 1)),
+            )
+        )
+    return population
+
+
 def run_microbiome_host_evolution(
     *,
     task: str,
     source: str,
+    sources: Iterable[str] | None = None,
     dataset_kwargs: Mapping[str, Any] | None = None,
     rules: Iterable[int] | None = None,
     learner_kind: str = "svm",
@@ -370,7 +413,10 @@ def run_microbiome_host_evolution(
         task: One of
             {"bit_memory", "opcode_logic", "opcode_logic16", "compound_opcode",
              "serial_adder", "toy_addition"}.
-        source: "direct" (no reservoir) or "reservoir".
+        source: Backward-compatible default source when sources is not provided.
+            One of {"direct", "reservoir"}.
+        sources: Optional initial sources to mix in one population. Values must be
+            from {"direct", "reservoir"}. Hosts are initialized in near-equal counts.
         dataset_kwargs: Task/builder kwargs (e.g. bits, n_samples, rule_number, ...).
         rules: Optional initial reservoir rules. When provided, initial hosts are
             assigned these rule values in near-equal counts across the population.
@@ -411,24 +457,20 @@ def run_microbiome_host_evolution(
 
     base_kwargs = dict(dataset_kwargs or {})
     l_cfg = dict(learner_config or {})
-    builder = _get_builder(task, source)
 
     rng = np.random.default_rng(seed)
-    init_rules = _normalize_initial_rules(source=source, base_kwargs=base_kwargs, rules=rules)
-
-    if init_rules is None:
-        population = [
-            MicrobiomeIndividual(rule_number=None, seed=int(rng.integers(0, 2**31 - 1)))
-            for _ in range(population_size)
-        ]
-    else:
-        # Build near-equal rule allocation, then shuffle to remove positional bias.
-        repeated_rules = [init_rules[i % len(init_rules)] for i in range(population_size)]
-        rng.shuffle(repeated_rules)
-        population = [
-            MicrobiomeIndividual(rule_number=rule, seed=int(rng.integers(0, 2**31 - 1)))
-            for rule in repeated_rules
-        ]
+    init_sources = _normalize_initial_sources(source=source, sources=sources)
+    init_rules = _normalize_initial_rules(
+        use_reservoir=("reservoir" in init_sources),
+        base_kwargs=base_kwargs,
+        rules=rules,
+    )
+    population = _build_initial_population(
+        population_size=population_size,
+        init_sources=init_sources,
+        init_rules=init_rules,
+        rng=rng,
+    )
 
     history: List[GenerationMetrics] = []
     final_fitness = np.zeros(population_size, dtype=float)
@@ -447,33 +489,31 @@ def run_microbiome_host_evolution(
         fitness = np.zeros(population_size, dtype=float)
 
         # Optional shared challenge indices per generation (for comparability).
-        shared_idx = None
+        shared_idx_by_source: dict[str, np.ndarray] = {}
         if shared_challenge_across_population:
-            key0 = _build_dataset_cache_key(
-                task=task,
-                source=source,
-                builder=builder,
-                base_kwargs=base_kwargs,
-                ind=population[0],
-            )
-            if use_dataset_cache and key0 in dataset_cache:
-                X0, y0 = dataset_cache[key0]
-                cache_hits += 1
-            else:
-                X0, y0 = _build_dataset_for_individual(
-                    builder, base_kwargs, source, population[0]
+            for src in sorted({ind.source for ind in population}):
+                rep = next(ind for ind in population if ind.source == src)
+                key0 = _build_dataset_cache_key(
+                    task=task,
+                    base_kwargs=base_kwargs,
+                    ind=rep,
                 )
-                if use_dataset_cache:
-                    dataset_cache[key0] = (X0, y0)
-                cache_misses += 1
-            challenge_take = min(challenge_size, X0.shape[0])
-            shared_idx = rng.choice(X0.shape[0], size=challenge_take, replace=False)
+                if use_dataset_cache and key0 in dataset_cache:
+                    X0, y0 = dataset_cache[key0]
+                    cache_hits += 1
+                else:
+                    X0, y0 = _build_dataset_for_individual(task, base_kwargs, rep)
+                    if use_dataset_cache:
+                        dataset_cache[key0] = (X0, y0)
+                    cache_misses += 1
+                challenge_take = min(challenge_size, X0.shape[0])
+                shared_idx_by_source[src] = rng.choice(
+                    X0.shape[0], size=challenge_take, replace=False
+                )
 
         for i, ind in enumerate(population):
             key = _build_dataset_cache_key(
                 task=task,
-                source=source,
-                builder=builder,
                 base_kwargs=base_kwargs,
                 ind=ind,
             )
@@ -481,7 +521,7 @@ def run_microbiome_host_evolution(
                 X, y = dataset_cache[key]
                 cache_hits += 1
             else:
-                X, y = _build_dataset_for_individual(builder, base_kwargs, source, ind)
+                X, y = _build_dataset_for_individual(task, base_kwargs, ind)
                 if use_dataset_cache:
                     dataset_cache[key] = (X, y)
                 cache_misses += 1
@@ -494,7 +534,7 @@ def run_microbiome_host_evolution(
                 learner_config=l_cfg,
                 fitness_metric=fitness_metric,
                 rng=rng,
-                shared_challenge_idx=shared_idx,
+                shared_challenge_idx=shared_idx_by_source.get(ind.source),
             )
             if inner_progress:
                 if progress_bar is not None:
@@ -524,7 +564,6 @@ def run_microbiome_host_evolution(
         for pidx in parent_idx:
             child = _mutate_individual(
                 population[int(pidx)],
-                source=source,
                 mutate_rule_prob=mutate_rule_prob,
                 mutate_seed_prob=mutate_seed_prob,
                 rng=rng,
@@ -573,6 +612,7 @@ def run_microbiome_host_evolution(
         config={
             "task": task,
             "source": source,
+            "sources": list(init_sources),
             "dataset_kwargs": base_kwargs,
             "rules": list(init_rules) if init_rules is not None else None,
             "learner_kind": learner_kind,
@@ -589,6 +629,7 @@ def run_microbiome_host_evolution(
         history=history,
         final_population_fitness=final_fitness.astype(float),
         best_genotype={
+            "source": best.source,
             "rule_number": None if best.rule_number is None else int(best.rule_number),
             "seed": int(best.seed),
         },
