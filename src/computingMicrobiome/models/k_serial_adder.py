@@ -48,6 +48,8 @@ class KSerialAdder(BaseEstimator, ClassifierMixin):
         seed: int = 0,
         readout_kind: str = "svm",
         readout_config: dict | None = None,
+        reservoir_kind: str = "eca",
+        reservoir_config: dict | None = None,
     ):
         self.rule_number = int(rule_number)
         self.width = int(width)
@@ -60,6 +62,8 @@ class KSerialAdder(BaseEstimator, ClassifierMixin):
         self.seed = int(seed)
         self.readout_kind = str(readout_kind)
         self.readout_config = readout_config
+        self.reservoir_kind = str(reservoir_kind)
+        self.reservoir_config = reservoir_config
 
         self.reg_: Readout | None = None
         self.input_locations_: np.ndarray | None = None
@@ -84,6 +88,8 @@ class KSerialAdder(BaseEstimator, ClassifierMixin):
             itr=self.itr,
             d_period=self.d_period,
             seed=self.seed,
+            reservoir_kind=self.reservoir_kind,
+            reservoir_config=self.reservoir_config,
         )
         rng = np.random.default_rng(self.seed)
         self.reg_ = make_readout(self.readout_kind, self.readout_config, rng=rng)
@@ -150,6 +156,8 @@ class KSerialAdder(BaseEstimator, ClassifierMixin):
                 reg=None,
                 collect_states=False,
                 x0_mode="zeros",
+                reservoir_kind=self.reservoir_kind,
+                reservoir_config=self.reservoir_config,
             )
 
             cue_idx = ep["cue_indices"]

@@ -13,9 +13,10 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from ..eca import eca_rule_lkt, eca_step
+from .episode_runner import run_reservoir_episode
 from ..readouts.base import Readout
-from ..utils import create_input_locations, flatten_history, int_to_bits_lsb
+from ..reservoirs.factory import make_reservoir
+from ..utils import create_input_locations, int_to_bits_lsb
 
 # -----------------------------
 # Channel layout (5 channels)
@@ -109,6 +110,8 @@ def run_episode_record_serial_adder(
     reg: Optional[Readout] = None,
     collect_states: bool = True,
     x0_mode: str = "zeros",
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
 ) -> dict:
     """Run one serial-adder episode and optionally score with a readout.
 
@@ -130,69 +133,40 @@ def run_episode_record_serial_adder(
     Returns:
         dict: Episode data including inputs, features, predictions, and states.
     """
-    rule = eca_rule_lkt(rule_number)
-
     a_bits_lsb = int_to_bits_lsb(a, bits)
     b_bits_lsb = int_to_bits_lsb(b, bits)
     input_streams, cue_indices = build_tagged_stream_serial_adder(
         a_bits_lsb, b_bits_lsb, d_period
     )
 
-    L = input_streams.shape[0]
-    iter_between = itr + 1
-    T = L * iter_between
-
-    if x0_mode == "zeros":
-        x = np.zeros(width, dtype=np.int8)
-    elif x0_mode == "random":
-        x = rng.integers(0, 2, size=width, dtype=np.int8)
-    else:
-        raise ValueError("x0_mode must be 'zeros' or 'random'")
-
-    history = [np.zeros(width, dtype=np.int8) for _ in range(itr)]
-
-    inputs_tick = np.zeros((L, N_CHANNELS), dtype=np.int8)
-    X_tick = np.zeros((L, itr * width), dtype=np.int8)
-    y_pred = np.full(L, -1, dtype=np.int8)
-
-    states = np.zeros((T, width), dtype=np.int8) if collect_states else None
-
-    channel_idx = np.arange(input_locations.size) % N_CHANNELS
-
-    tick = 0
-    for i in range(T):
-        if i % iter_between == 0:
-            in_bits = input_streams[tick]
-            inputs_tick[tick] = in_bits
-
-            # XOR inject: each injection site reads one channel
-            x[input_locations] ^= in_bits[channel_idx]
-
-        history.append(x.copy())
-        history = history[-itr:]
-
-        if i % iter_between == 0:
-            feat = flatten_history(history)
-            X_tick[tick] = feat
-            if reg is not None:
-                y_pred[tick] = int(reg.predict([feat])[0])
-            tick += 1
-
-        if collect_states:
-            states[i] = x
-
-        x = eca_step(x, rule, boundary, rng=rng)
+    reservoir = make_reservoir(
+        reservoir_kind=reservoir_kind,
+        rule_number=rule_number,
+        width=width,
+        boundary=boundary,
+        reservoir_config=reservoir_config,
+    )
+    ep = run_reservoir_episode(
+        input_streams=input_streams,
+        reservoir=reservoir,
+        itr=itr,
+        input_locations=input_locations,
+        rng=rng,
+        reg=reg,
+        collect_states=collect_states,
+        x0_mode=x0_mode,
+    )
 
     sum_bits_lsb = int_to_bits_lsb(a + b, bits)
 
     return {
-        "inputs_tick": inputs_tick,
-        "X_tick": X_tick,
-        "y_pred_tick": y_pred,
-        "states": states,
-        "L": L,
-        "T": T,
-        "iter_between": iter_between,
+        "inputs_tick": ep["inputs_tick"],
+        "X_tick": ep["X_tick"],
+        "y_pred_tick": ep["y_pred_tick"],
+        "states": ep["states"],
+        "L": ep["L"],
+        "T": ep["T"],
+        "iter_between": ep["iter_between"],
         "input_streams": input_streams,
         "cue_indices": cue_indices,
         "y_true_bits": sum_bits_lsb,
@@ -209,6 +183,8 @@ def build_dataset_serial_adder(
     itr: int,
     d_period: int,
     seed: int = 0,
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Build a dataset from random N-bit addition problems.
 
@@ -251,6 +227,8 @@ def build_dataset_serial_adder(
             reg=None,
             collect_states=False,
             x0_mode="zeros",
+            reservoir_kind=reservoir_kind,
+            reservoir_config=reservoir_config,
         )
 
         cue_idx = ep["cue_indices"]

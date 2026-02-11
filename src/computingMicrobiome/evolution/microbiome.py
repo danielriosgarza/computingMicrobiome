@@ -74,6 +74,8 @@ class MicrobiomeIndividual:
     source: str
     rule_number: int | None
     seed: int
+    reservoir_kind: str | None = None
+    reservoir_config: dict[str, Any] | None = None
 
 
 def _filter_kwargs_for_callable(fn: Callable[..., Any], kwargs: Mapping[str, Any]) -> dict:
@@ -104,8 +106,12 @@ def _build_dataset_for_individual(
     kwargs = dict(base_kwargs)
     if ind.source == "reservoir":
         kwargs["seed"] = int(ind.seed)
-        if ind.rule_number is not None:
+        kwargs["reservoir_kind"] = str(ind.reservoir_kind or "eca")
+        kwargs["reservoir_config"] = ind.reservoir_config
+        if (ind.reservoir_kind or "eca") == "eca" and ind.rule_number is not None:
             kwargs["rule_number"] = int(ind.rule_number)
+        else:
+            kwargs["rule_number"] = int(kwargs.get("rule_number", 110))
     else:
         # Some direct builders accept a seed (e.g., serial adder); others do not.
         kwargs["seed"] = int(ind.seed)
@@ -138,14 +144,20 @@ def _build_dataset_cache_key(
     kwargs = dict(base_kwargs)
     if ind.source == "reservoir":
         kwargs["seed"] = int(ind.seed)
-        if ind.rule_number is not None:
+        kwargs["reservoir_kind"] = str(ind.reservoir_kind or "eca")
+        kwargs["reservoir_config"] = ind.reservoir_config
+        if (ind.reservoir_kind or "eca") == "eca" and ind.rule_number is not None:
             kwargs["rule_number"] = int(ind.rule_number)
+        else:
+            kwargs["rule_number"] = int(kwargs.get("rule_number", 110))
     else:
         kwargs["seed"] = int(ind.seed)
     filtered = _filter_kwargs_for_callable(builder, kwargs)
     return (
         task,
         ind.source,
+        ind.reservoir_kind,
+        _freeze_for_key(ind.reservoir_config),
         _freeze_for_key(filtered),
     )
 
@@ -349,9 +361,19 @@ def _mutate_individual(
     mutate_seed_prob: float,
     rng: np.random.Generator,
 ) -> MicrobiomeIndividual:
-    child = MicrobiomeIndividual(source=ind.source, rule_number=ind.rule_number, seed=int(ind.seed))
+    child = MicrobiomeIndividual(
+        source=ind.source,
+        rule_number=ind.rule_number,
+        seed=int(ind.seed),
+        reservoir_kind=ind.reservoir_kind,
+        reservoir_config=ind.reservoir_config,
+    )
 
-    if ind.source == "reservoir" and child.rule_number is not None:
+    if (
+        ind.source == "reservoir"
+        and (child.reservoir_kind or "eca") == "eca"
+        and child.rule_number is not None
+    ):
         if rng.random() < mutate_rule_prob:
             step = int(rng.choice([-1, 1]))
             child.rule_number = int((child.rule_number + step) % 256)
@@ -411,6 +433,13 @@ def _normalize_initial_rules(
     return normalized
 
 
+def _normalize_reservoir_kind(kind: str) -> str:
+    kk = str(kind).strip().lower()
+    if kk not in {"eca", "crm"}:
+        raise ValueError("reservoir_kind must be one of {'eca', 'crm'}")
+    return kk
+
+
 def _normalize_initial_sources(*, source: str, sources: Iterable[str] | None) -> list[str]:
     if sources is None:
         return [source]
@@ -428,6 +457,8 @@ def _build_initial_population(
     population_size: int,
     init_sources: list[str],
     init_rules: list[int] | None,
+    init_reservoir_kind: str,
+    init_reservoir_config: Mapping[str, Any] | None,
     rng: np.random.Generator,
 ) -> list[MicrobiomeIndividual]:
     repeated_sources = [init_sources[i % len(init_sources)] for i in range(population_size)]
@@ -438,15 +469,20 @@ def _build_initial_population(
     for src in repeated_sources:
         rule = None
         if src == "reservoir":
-            if not init_rules:
-                raise ValueError("Reservoir initialization requires at least one rule")
-            rule = int(init_rules[reservoir_count % len(init_rules)])
-            reservoir_count += 1
+            if init_reservoir_kind == "eca":
+                if not init_rules:
+                    raise ValueError("Reservoir initialization requires at least one rule")
+                rule = int(init_rules[reservoir_count % len(init_rules)])
+                reservoir_count += 1
         population.append(
             MicrobiomeIndividual(
                 source=src,
                 rule_number=rule,
                 seed=int(rng.integers(0, 2**31 - 1)),
+                reservoir_kind=(init_reservoir_kind if src == "reservoir" else None),
+                reservoir_config=(
+                    dict(init_reservoir_config) if (src == "reservoir" and init_reservoir_config is not None) else None
+                ),
             )
         )
     return population
@@ -481,6 +517,8 @@ def _serialize_population(population: list[MicrobiomeIndividual]) -> list[dict[s
             "source": ind.source,
             "rule_number": None if ind.rule_number is None else int(ind.rule_number),
             "seed": int(ind.seed),
+            "reservoir_kind": ind.reservoir_kind,
+            "reservoir_config": ind.reservoir_config,
         }
         for ind in population
     ]
@@ -513,6 +551,8 @@ def run_microbiome_host_evolution(
     inner_progress: bool = True,
     inner_progress_every: int = 5,
     use_dataset_cache: bool = True,
+    reservoir_kind: str = "eca",
+    reservoir_config: Mapping[str, Any] | None = None,
 ) -> EvolutionRunResult:
     """Run host evolution with fixed-capacity learners and microbiome inheritance.
 
@@ -573,8 +613,9 @@ def run_microbiome_host_evolution(
 
     rng = np.random.default_rng(seed)
     init_sources = _normalize_initial_sources(source=source, sources=sources)
+    init_reservoir_kind = _normalize_reservoir_kind(reservoir_kind)
     init_rules = _normalize_initial_rules(
-        use_reservoir=("reservoir" in init_sources),
+        use_reservoir=("reservoir" in init_sources and init_reservoir_kind == "eca"),
         base_kwargs=base_kwargs,
         rules=rules,
     )
@@ -582,6 +623,8 @@ def run_microbiome_host_evolution(
         population_size=population_size,
         init_sources=init_sources,
         init_rules=init_rules,
+        init_reservoir_kind=init_reservoir_kind,
+        init_reservoir_config=reservoir_config,
         rng=rng,
     )
 
@@ -734,6 +777,8 @@ def run_microbiome_host_evolution(
             "sources": list(init_sources),
             "dataset_kwargs": base_kwargs,
             "rules": list(init_rules) if init_rules is not None else None,
+            "reservoir_kind": init_reservoir_kind,
+            "reservoir_config": dict(reservoir_config) if reservoir_config is not None else None,
             "learner_kind": learner_kind,
             "learner_config": l_cfg,
             "population_size": population_size,
@@ -753,6 +798,8 @@ def run_microbiome_host_evolution(
             "source": best.source,
             "rule_number": None if best.rule_number is None else int(best.rule_number),
             "seed": int(best.seed),
+            "reservoir_kind": best.reservoir_kind,
+            "reservoir_config": best.reservoir_config,
         },
         seed=seed,
         final_population_genotypes=_serialize_population(population),

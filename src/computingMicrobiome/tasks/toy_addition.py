@@ -118,7 +118,7 @@ def evaluate_models(models: List[Readout], X: np.ndarray, Y: np.ndarray) -> dict
     Returns:
         dict: Metrics including per-bit accuracy and full-vector accuracy.
     """
-    X = np.asarray(X, dtype=np.int8)
+    X = np.asarray(X)
     Y = np.asarray(Y, dtype=np.int8)
 
     preds = np.zeros_like(Y, dtype=np.int8)
@@ -153,6 +153,8 @@ def _full_adder_reservoir_features_with_locations(
     input_locations: np.ndarray,
     feature_mode: str = "cue_tick",
     output_window: int = 2,
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Reservoir features and labels for one full-adder micro-episode."""
     a = int(a) & 1
@@ -180,6 +182,8 @@ def _full_adder_reservoir_features_with_locations(
         x0_mode="zeros",
         feature_mode=feature_mode,
         output_window=output_window,
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
     )
     t = apply_opcode(OP_XOR, a, b)
     feats.append(ep0["X_episode"].reshape(-1))
@@ -203,6 +207,8 @@ def _full_adder_reservoir_features_with_locations(
         x0_mode="zeros",
         feature_mode=feature_mode,
         output_window=output_window,
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
     )
     sum_bit = apply_opcode(OP_XOR, t, cin)
     feats.append(ep1["X_episode"].reshape(-1))
@@ -226,6 +232,8 @@ def _full_adder_reservoir_features_with_locations(
         x0_mode="zeros",
         feature_mode=feature_mode,
         output_window=output_window,
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
     )
     u = apply_opcode(OP_AND, cin, t)
     feats.append(ep2["X_episode"].reshape(-1))
@@ -249,6 +257,8 @@ def _full_adder_reservoir_features_with_locations(
         x0_mode="zeros",
         feature_mode=feature_mode,
         output_window=output_window,
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
     )
     v = apply_opcode(OP_AND, a, b)
     feats.append(ep3["X_episode"].reshape(-1))
@@ -272,6 +282,8 @@ def _full_adder_reservoir_features_with_locations(
         x0_mode="zeros",
         feature_mode=feature_mode,
         output_window=output_window,
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
     )
     cout = apply_opcode(OP_OR, u, v)
     feats.append(ep4["X_episode"].reshape(-1))
@@ -296,6 +308,8 @@ def full_adder_reservoir_features(
     seed: int,
     feature_mode: str = "cue_tick",
     output_window: int = 2,
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, int, int]:
     """Reservoir features and labels for a single full-adder step.
 
@@ -336,6 +350,8 @@ def full_adder_reservoir_features(
         input_locations=input_locations,
         feature_mode=feature_mode,
         output_window=output_window,
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
     )
     return F, y, int(y[0]), int(y[1])
 
@@ -366,7 +382,7 @@ def addition_reservoir_features(
         raise ValueError("n_bits must be >= 1")
     cin = int(cin) & 1
 
-    rule_number = int(reservoir_params["rule_number"])
+    rule_number = int(reservoir_params.get("rule_number", 110))
     width = int(reservoir_params["width"])
     boundary = str(reservoir_params["boundary"])
     itr = int(reservoir_params["itr"])
@@ -376,6 +392,8 @@ def addition_reservoir_features(
     seed = int(reservoir_params.get("seed", 0))
     feature_mode = str(reservoir_params.get("feature_mode", "cue_tick"))
     output_window = int(reservoir_params.get("output_window", 2))
+    reservoir_kind = str(reservoir_params.get("reservoir_kind", "eca"))
+    reservoir_config = reservoir_params.get("reservoir_config")
 
     rng = np.random.default_rng(seed)
     input_locations = create_input_locations(width, recurrence, 10, rng)
@@ -403,6 +421,8 @@ def addition_reservoir_features(
             input_locations=input_locations,
             feature_mode=feature_mode,
             output_window=output_window,
+            reservoir_kind=reservoir_kind,
+            reservoir_config=reservoir_config,
         )
         sum_bits.append(int(yi[0]))
         carry = int(yi[1])
@@ -447,7 +467,7 @@ def build_reservoir_dataset(
             X_res.append(Phi)
             Y.append(Y_episode)
 
-    X = np.vstack(X_res).astype(np.int8)
+    X = np.vstack(X_res)
     Y = np.vstack(Y).astype(np.int8)
     return X, Y
 
@@ -469,7 +489,7 @@ def train_reservoir_linear_models(
     Returns:
         List[Readout]: One classifier per output bit.
     """
-    X_res = np.asarray(X_res, dtype=np.int8)
+    X_res = np.asarray(X_res)
     Y = np.asarray(Y, dtype=np.int8)
     models: List[Readout] = []
     rng = np.random.default_rng(seed)
@@ -540,7 +560,7 @@ def evaluate_linear_task(
         dict: Metrics including per-bit accuracy, full-vector accuracy,
         and baseline statistics.
     """
-    X = np.asarray(X, dtype=np.int8)
+    X = np.asarray(X)
     Y = np.asarray(Y, dtype=np.int8)
 
     models: List[Readout] = []

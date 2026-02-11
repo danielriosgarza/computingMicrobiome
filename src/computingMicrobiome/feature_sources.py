@@ -29,33 +29,76 @@ def _pack_dataset(
     return X, y, {"input_locations": input_locations}
 
 
-def build_reservoir_opcode_logic_dataset(**kwargs):
-    X, y, input_locations = build_dataset_programmed_logic(**kwargs)
+def build_reservoir_opcode_logic_dataset(
+    *, reservoir_kind: str = "eca", reservoir_config: dict | None = None, **kwargs
+):
+    X, y, input_locations = build_dataset_programmed_logic(
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
+        **kwargs,
+    )
     return _pack_dataset(X, y, input_locations)
 
 
-def build_reservoir_opcode_logic16_dataset(**kwargs):
-    X, y, input_locations = build_dataset_programmed_logic16(**kwargs)
+def build_reservoir_opcode_logic16_dataset(
+    *, reservoir_kind: str = "eca", reservoir_config: dict | None = None, **kwargs
+):
+    X, y, input_locations = build_dataset_programmed_logic16(
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
+        **kwargs,
+    )
     return _pack_dataset(X, y, input_locations)
 
 
-def build_reservoir_compound_opcode_dataset(**kwargs):
-    X, y, input_locations = build_dataset_compound_opcode(**kwargs)
+def build_reservoir_compound_opcode_dataset(
+    *, reservoir_kind: str = "eca", reservoir_config: dict | None = None, **kwargs
+):
+    X, y, input_locations = build_dataset_compound_opcode(
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
+        **kwargs,
+    )
     return _pack_dataset(X, y, input_locations)
 
 
-def build_reservoir_bit_memory_dataset(**kwargs):
-    X, y, input_locations = build_dataset_output_window_only(**kwargs)
+def build_reservoir_bit_memory_dataset(
+    *, reservoir_kind: str = "eca", reservoir_config: dict | None = None, **kwargs
+):
+    X, y, input_locations = build_dataset_output_window_only(
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
+        **kwargs,
+    )
     return _pack_dataset(X, y, input_locations)
 
 
-def build_reservoir_serial_adder_dataset(**kwargs):
-    X, y, input_locations = build_dataset_serial_adder(**kwargs)
+def build_reservoir_serial_adder_dataset(
+    *, reservoir_kind: str = "eca", reservoir_config: dict | None = None, **kwargs
+):
+    X, y, input_locations = build_dataset_serial_adder(
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
+        **kwargs,
+    )
     return _pack_dataset(X, y, input_locations)
 
 
-def build_reservoir_toy_addition_dataset(n_bits: int, cin: int, **kwargs):
-    X, y = build_addition_reservoir_dataset(n_bits, cin, **kwargs)
+def build_reservoir_toy_addition_dataset(
+    n_bits: int,
+    cin: int,
+    *,
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
+    **kwargs,
+):
+    X, y = build_addition_reservoir_dataset(
+        n_bits,
+        cin,
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
+        **kwargs,
+    )
     return _pack_dataset(X, y, None)
 
 

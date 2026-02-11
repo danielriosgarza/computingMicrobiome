@@ -8,10 +8,11 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-from ..eca import eca_rule_lkt, eca_step
+from .episode_runner import run_reservoir_episode
 from ..readouts.base import Readout
 from ..readouts.factory import make_readout
-from ..utils import create_input_locations, flatten_history, int_to_bits
+from ..reservoirs.factory import make_reservoir
+from ..utils import create_input_locations, int_to_bits
 
 
 def true_bits_from_episode_outputs(outputs_tick: np.ndarray, bits: int) -> np.ndarray:
@@ -118,6 +119,8 @@ def run_episode_record(
     reg: Optional[Readout] = None,
     collect_states: bool = True,
     x0_mode: str = "zeros",
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
 ) -> dict:
     """Run one episode and optionally record states and predictions.
 
@@ -137,75 +140,41 @@ def run_episode_record(
     Returns:
         dict: Episode data including inputs, outputs, features, and predictions.
     """
-    rule = eca_rule_lkt(rule_number)
-
     B = len(bits_arr)
     L = d_period + 2 * B
-    iter_between = itr + 1
-    T = L * iter_between
 
     input_streams = create_input_streams(bits_arr, d_period)
     output_streams = create_output_streams(bits_arr, d_period)
+    reservoir = make_reservoir(
+        reservoir_kind=reservoir_kind,
+        rule_number=rule_number,
+        width=width,
+        boundary=boundary,
+        reservoir_config=reservoir_config,
+    )
+    ep = run_reservoir_episode(
+        input_streams=input_streams,
+        reservoir=reservoir,
+        itr=itr,
+        input_locations=input_locations,
+        rng=rng,
+        reg=reg,
+        collect_states=collect_states,
+        x0_mode=x0_mode,
+    )
 
-    if x0_mode == "zeros":
-        x = np.zeros(width, dtype=np.int8)
-    elif x0_mode == "random":
-        x = rng.integers(0, 2, size=width, dtype=np.int8)
-    else:
-        raise ValueError("x0_mode must be 'zeros' or 'random'")
-
-    history = [np.zeros(width, dtype=np.int8) for _ in range(itr)]
-
-    inputs_tick = np.zeros((L, 4), dtype=np.int8)
-    outputs_tick = np.zeros((L, 3), dtype=np.int8)
-    y_true = np.zeros(L, dtype=np.int8)
-    X_tick = np.zeros((L, itr * width), dtype=np.int8)
-    y_pred = np.full(L, -1, dtype=np.int8)
-
-    states = np.zeros((T, width), dtype=np.int8) if collect_states else None
-
-    tick = 0
-    channel_idx = np.arange(input_locations.size) % 4
-    for i in range(T):
-        if i % iter_between == 0:
-            in_bits = input_streams[tick]
-            out_bits = output_streams[tick]
-
-            inputs_tick[tick] = in_bits
-            outputs_tick[tick] = out_bits
-
-            # XOR injection (vectorized by channel index)
-            x[input_locations] ^= in_bits[channel_idx]
-
-        history.append(x.copy())
-        history = history[-itr:]
-
-        if i % iter_between == 0:
-            feat = flatten_history(history)
-            X_tick[tick] = feat
-            cls = label_from_outputs(out_bits)
-            y_true[tick] = cls
-
-            if reg is not None:
-                y_pred[tick] = int(reg.predict([feat])[0])
-
-            tick += 1
-
-        if collect_states:
-            states[i] = x
-
-        x = eca_step(x, rule, boundary, rng=rng)
+    y_true = np.array([label_from_outputs(row) for row in output_streams], dtype=np.int8)
 
     return {
-        "inputs_tick": inputs_tick,
-        "outputs_tick": outputs_tick,
+        "inputs_tick": ep["inputs_tick"],
+        "outputs_tick": output_streams,
         "y_true": y_true,
-        "X_tick": X_tick,
-        "y_pred": y_pred,
-        "states": states,
-        "L": L,
-        "T": T,
-        "iter_between": iter_between,
+        "X_tick": ep["X_tick"],
+        "y_pred": ep["y_pred_tick"],
+        "states": ep["states"],
+        "L": ep["L"],
+        "T": ep["T"],
+        "iter_between": ep["iter_between"],
     }
 
 
@@ -218,6 +187,8 @@ def build_dataset_output_window_only(
     itr: int,
     d_period: int,
     seed: int = 0,
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Build a dataset using only the output window.
 
@@ -256,6 +227,8 @@ def build_dataset_output_window_only(
             reg=None,
             collect_states=False,
             x0_mode="zeros",  # IMPORTANT
+            reservoir_kind=reservoir_kind,
+            reservoir_config=reservoir_config,
         )
 
         # output window samples (last bits ticks)
@@ -282,6 +255,8 @@ def train_memory_readout(
     seed_train: int = 0,
     readout_kind: str = "svm",
     readout_config: Optional[dict] = None,
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
 ) -> Tuple[Readout, np.ndarray]:
     """Train a linear readout on the output-window dataset.
 
@@ -309,6 +284,8 @@ def train_memory_readout(
         itr,
         d_period,
         seed=seed_train,
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
     )
     rng = np.random.default_rng(seed_train)
     reg = make_readout(readout_kind, readout_config, rng=rng)
@@ -331,6 +308,8 @@ def evaluate_memory_trials(
     n_trials: int = 100,
     seed_trials: int = 0,
     resample_input_locations: bool = False,
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
 ) -> np.ndarray:
     """Evaluate recall correctness across randomized trials.
 
@@ -378,6 +357,8 @@ def evaluate_memory_trials(
             reg=None,
             collect_states=False,
             x0_mode="zeros",
+            reservoir_kind=reservoir_kind,
+            reservoir_config=reservoir_config,
         )
 
         X_out = ep["X_tick"][-bits:]  # features in output window

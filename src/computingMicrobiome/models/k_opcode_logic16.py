@@ -48,6 +48,8 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
         seed: int = 0,
         readout_kind: str = "svm",
         readout_config: dict | None = None,
+        reservoir_kind: str = "eca",
+        reservoir_config: dict | None = None,
     ):
         self.rule_number = int(rule_number)
         self.width = int(width)
@@ -61,6 +63,8 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
         self.seed = int(seed)
         self.readout_kind = str(readout_kind)
         self.readout_config = readout_config
+        self.reservoir_kind = str(reservoir_kind)
+        self.reservoir_config = reservoir_config
 
         self.reg_: Readout | None = None
         self.input_locations_: np.ndarray | None = None
@@ -89,6 +93,8 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
             order=None,
             readout_kind=self.readout_kind,
             readout_config=self.readout_config,
+            reservoir_kind=self.reservoir_kind,
+            reservoir_config=self.reservoir_config,
         )
         return self
 
@@ -141,6 +147,8 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
                 x0_mode="zeros",
                 feature_mode=self.feature_mode,
                 output_window=self.output_window,
+                reservoir_kind=self.reservoir_kind,
+                reservoir_config=self.reservoir_config,
             )
 
             if self.feature_mode == "cue_tick":

@@ -39,6 +39,8 @@ class KBitMemory(BaseEstimator, ClassifierMixin):
         seed: int = 0,
         readout_kind: str = "svm",
         readout_config: dict | None = None,
+        reservoir_kind: str = "eca",
+        reservoir_config: dict | None = None,
     ):
         self.bits = bits
         self.rule_number = rule_number
@@ -50,6 +52,8 @@ class KBitMemory(BaseEstimator, ClassifierMixin):
         self.seed = seed
         self.readout_kind = str(readout_kind)
         self.readout_config = readout_config
+        self.reservoir_kind = str(reservoir_kind)
+        self.reservoir_config = reservoir_config
 
         self.reg_: Readout | None = None
         self.input_locations_: np.ndarray | None = None
@@ -75,6 +79,8 @@ class KBitMemory(BaseEstimator, ClassifierMixin):
             seed_train=self.seed,
             readout_kind=self.readout_kind,
             readout_config=self.readout_config,
+            reservoir_kind=self.reservoir_kind,
+            reservoir_config=self.reservoir_config,
         )
         return self
 
@@ -106,6 +112,8 @@ class KBitMemory(BaseEstimator, ClassifierMixin):
                 reg=self.reg_,
                 collect_states=False,
                 x0_mode="zeros",
+                reservoir_kind=self.reservoir_kind,
+                reservoir_config=self.reservoir_config,
             )
 
             X_out = ep["X_tick"][-self.bits:]  # features in output window

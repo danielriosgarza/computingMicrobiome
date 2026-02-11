@@ -20,8 +20,9 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 import numpy as np
-from ..eca import eca_rule_lkt, eca_step
-from ..utils import create_input_locations, flatten_history
+from .episode_runner import run_reservoir_episode
+from ..reservoirs.factory import make_reservoir
+from ..utils import create_input_locations
 from ..readouts.base import Readout
 from ..readouts.factory import make_readout
 
@@ -239,6 +240,8 @@ def run_episode_record_tagged(
     x0_mode: str = "zeros",
     feature_mode: str = "cue_tick",
     output_window: int = 2,
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
 ) -> dict:
     """Run one compound-opcode episode and optionally score with a readout.
 
@@ -265,8 +268,6 @@ def run_episode_record_tagged(
     Returns:
         dict: Episode data including inputs, features, predictions, and states.
     """
-    rule = eca_rule_lkt(rule_number)
-
     input_streams = build_tagged_stream(
         op1_bits_msb_first=op1_bits_msb_first,
         a=a,
@@ -277,76 +278,47 @@ def run_episode_record_tagged(
         repeats=repeats,
     )
 
-    L = input_streams.shape[0]
-    iter_between = itr + 1
-    T = L * iter_between
-
-    if x0_mode == "zeros":
-        x = np.zeros(width, dtype=np.int8)
-    elif x0_mode == "random":
-        x = rng.integers(0, 2, size=width, dtype=np.int8)
-    else:
-        raise ValueError("x0_mode must be 'zeros' or 'random'")
-
-    history = [np.zeros(width, dtype=np.int8) for _ in range(itr)]
-
-    inputs_tick = np.zeros((L, N_CHANNELS), dtype=np.int8)
-    X_tick = np.zeros((L, itr * width), dtype=np.int8)
-    y_pred = np.full(L, -1, dtype=np.int8)
-
-    states = np.zeros((T, width), dtype=np.int8) if collect_states else None
-
-    channel_idx = np.arange(input_locations.size) % N_CHANNELS
-
-    tick = 0
-    for i in range(T):
-        if i % iter_between == 0:
-            in_bits = input_streams[tick]
-            inputs_tick[tick] = in_bits
-
-            # XOR inject: each injection site reads one channel
-            x[input_locations] ^= in_bits[channel_idx]
-
-        history.append(x.copy())
-        history = history[-itr:]
-
-        if i % iter_between == 0:
-            feat = flatten_history(history)
-            X_tick[tick] = feat
-
-            if reg is not None:
-                y_pred[tick] = int(reg.predict([feat])[0])
-
-            tick += 1
-
-        if collect_states:
-            states[i] = x
-
-        x = eca_step(x, rule, boundary, rng=rng)
+    reservoir = make_reservoir(
+        reservoir_kind=reservoir_kind,
+        rule_number=rule_number,
+        width=width,
+        boundary=boundary,
+        reservoir_config=reservoir_config,
+    )
+    ep = run_reservoir_episode(
+        input_streams=input_streams,
+        reservoir=reservoir,
+        itr=itr,
+        input_locations=input_locations,
+        rng=rng,
+        reg=reg,
+        collect_states=collect_states,
+        x0_mode=x0_mode,
+    )
 
     # True label is the compound gate output (1 bit) at episode level
     y_true = apply_compound_opcode(op1_bits_msb_first, a, b, op2_bits_msb_first, c)
 
     # Package episode-level features
     if feature_mode == "cue_tick":
-        X_episode = X_tick[-1]  # cue tick is the last tick
+        X_episode = ep["X_tick"][-1]  # cue tick is the last tick
     elif feature_mode == "output_window":
         if output_window < 1:
             raise ValueError("output_window must be >= 1")
-        X_episode = X_tick[-output_window:]  # shape (W, itr*width)
+        X_episode = ep["X_tick"][-output_window:]  # shape (W, itr*width)
     else:
         raise ValueError("feature_mode must be 'cue_tick' or 'output_window'")
 
     return {
-        "inputs_tick": inputs_tick,
-        "X_tick": X_tick,
+        "inputs_tick": ep["inputs_tick"],
+        "X_tick": ep["X_tick"],
         "X_episode": X_episode,
         "y_true": int(y_true),
-        "y_pred_tick": y_pred,
-        "states": states,
-        "L": L,
-        "T": T,
-        "iter_between": iter_between,
+        "y_pred_tick": ep["y_pred_tick"],
+        "states": ep["states"],
+        "L": ep["L"],
+        "T": ep["T"],
+        "iter_between": ep["iter_between"],
         "input_streams": input_streams,
     }
 
@@ -362,6 +334,8 @@ def build_dataset_compound_opcode(
     feature_mode: str = "cue_tick",
     output_window: int = 2,
     seed: int = 0,
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Build a dataset for the compound-opcode task.
 
@@ -424,6 +398,8 @@ def build_dataset_compound_opcode(
                             x0_mode="zeros",
                             feature_mode=feature_mode,
                             output_window=output_window,
+                            reservoir_kind=reservoir_kind,
+                            reservoir_config=reservoir_config,
                         )
                         if feature_mode == "cue_tick":
                             X_all.append(ep["X_episode"][None, :])  # (1, feat)
@@ -450,6 +426,8 @@ def train_compound_opcode_readout(
     seed_train: int = 0,
     readout_kind: str = "svm",
     readout_config: Optional[dict] = None,
+    reservoir_kind: str = "eca",
+    reservoir_config: dict | None = None,
 ) -> Tuple[Readout, np.ndarray]:
     """Train a linear readout for the compound-opcode task.
 
@@ -481,6 +459,8 @@ def train_compound_opcode_readout(
         feature_mode=feature_mode,
         output_window=output_window,
         seed=seed_train,
+        reservoir_kind=reservoir_kind,
+        reservoir_config=reservoir_config,
     )
     rng = np.random.default_rng(seed_train)
     reg = make_readout(readout_kind, readout_config, rng=rng)
