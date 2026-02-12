@@ -429,12 +429,21 @@ def make_spacetime_gif(
     return path
 
 
-def plot_red_green_grid(correctness: np.ndarray, title: str = ""):
+def plot_red_green_grid(
+    correctness: np.ndarray,
+    title: str = "",
+    *,
+    show: bool = True,
+) -> tuple[plt.Figure, plt.Axes]:
     """Plot correctness grid with red/green tiles.
 
     Args:
         correctness: Array of shape (n_trials, bits) with values {-1, +1}.
         title: Plot title.
+        show: Whether to call plt.show().
+
+    Returns:
+        Tuple[plt.Figure, plt.Axes]: Figure and axes containing the plot.
     """
     correctness = np.asarray(correctness)
     n_trials, bits = correctness.shape
@@ -473,10 +482,12 @@ def plot_red_green_grid(correctness: np.ndarray, title: str = ""):
     )
 
     plt.tight_layout()
-    plt.show()
+    if show:
+        plt.show()
 
     acc = (correctness == 1).mean()
     print(f"Bit accuracy over all trials/bits: {acc:.3f}")
+    return fig, ax
 
 
 def plot_xor_episode(

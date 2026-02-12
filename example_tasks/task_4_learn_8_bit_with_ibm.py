@@ -12,14 +12,13 @@ import pathlib
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import BoundaryNorm, ListedColormap
-from matplotlib.patches import Patch
 
 from computingMicrobiome.benchmarks.k_bit_memory_bm import (
     build_dataset_output_window_only,
     evaluate_memory_trials,
 )
 from computingMicrobiome.ibm import make_ibm_config_from_species
+from computingMicrobiome.plot_utils import plot_red_green_grid
 from computingMicrobiome.readouts.factory import make_readout
 
 # Parameters
@@ -139,25 +138,12 @@ def main() -> None:
     fig_hist.savefig(hist_path, dpi=150)
     print(f"Histogram saved to {hist_path}")
 
-    # Per-trial/per-bit correctness heatmap
-    fig_heat, ax_heat = plt.subplots(figsize=(7, 8))
-    cmap = ListedColormap(["#d62728", "#2ca02c"])  # wrong / correct
-    norm = BoundaryNorm([-1.5, 0.0, 1.5], cmap.N)
-    ax_heat.imshow(correctness, cmap=cmap, norm=norm, interpolation="nearest", aspect="auto")
-    ax_heat.set_title("IBM trial-bit correctness heatmap", fontsize=12)
-    ax_heat.set_xlabel("Bit index")
-    ax_heat.set_ylabel("Challenge index")
-    ax_heat.set_xticks(np.arange(BITS))
-    ax_heat.set_yticks(np.arange(0, N_CHALLENGES, max(1, N_CHALLENGES // 10)))
-    ax_heat.legend(
-        handles=[
-            Patch(color="#2ca02c", label="correct"),
-            Patch(color="#d62728", label="wrong"),
-        ],
-        loc="upper right",
-        framealpha=0.95,
+    # Per-trial/per-bit correctness heatmap (package helper with cell separators)
+    fig_heat, _ = plot_red_green_grid(
+        correctness,
+        title="IBM trial-bit correctness heatmap",
+        show=False,
     )
-    fig_heat.tight_layout()
 
     heatmap_path = OUT_DIR / "task_4_trial_bit_heatmap.png"
     fig_heat.savefig(heatmap_path, dpi=150)
