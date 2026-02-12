@@ -222,7 +222,45 @@ def make_ibm_config_from_species(
     idx = _normalize_species_indices(species_indices)
 
     n_species = len(idx)
-    n_resources = N_RESOURCES_UNIVERSE
+
+    # Determine the minimal set of resources that are actually relevant for the
+    # selected species: any resource they uptake, secrete, or that receives
+    # external feed. This is then remapped to a compact index set [0, M).
+    used: set[int] = set()
+    for i in idx:
+        used.update(int(x) for x in uni.uptake_list[i].tolist())
+        used.update(int(x) for x in uni.secrete_list[i].tolist())
+
+    # Always include resources that receive non-zero external feed.
+    feed_nonzero = np.nonzero(uni.feed_rate > 0.0)[0].tolist()
+    used.update(int(x) for x in feed_nonzero)
+
+    if not used:
+        # Fallback: in the unlikely case nothing was marked as used, keep at
+        # least one resource so the system is well-defined.
+        used.add(0)
+
+    res_indices = sorted(used)
+    n_resources = len(res_indices)
+
+    # Mapping from original resource indices [0, N_RESOURCES_UNIVERSE) to
+    # compacted indices [0, n_resources).
+    res_map = -np.ones(N_RESOURCES_UNIVERSE, dtype=np.int16)
+    for new_idx, old_idx in enumerate(res_indices):
+        res_map[int(old_idx)] = int(new_idx)
+
+    # Slice feed_rate and remap per-species resource lists.
+    feed_rate_compact = uni.feed_rate[res_indices]
+
+    uptake_compact: list[list[int]] = []
+    secrete_compact: list[list[int]] = []
+    for i in idx:
+        u_src = uni.uptake_list[i]
+        s_src = uni.secrete_list[i]
+        u_mapped = sorted({int(res_map[int(x)]) for x in u_src.tolist() if res_map[int(x)] >= 0})
+        s_mapped = sorted({int(res_map[int(x)]) for x in s_src.tolist() if res_map[int(x)] >= 0})
+        uptake_compact.append(u_mapped)
+        secrete_compact.append(s_mapped)
 
     cfg: dict[str, object] = {
         "height": int(height),
@@ -235,7 +273,7 @@ def make_ibm_config_from_species(
         "diff_denom": int(diff_denom),
         "transport_shift": int(transport_shift),
         "dilution_p": float(dilution_p),
-        "feed_rate": uni.feed_rate.tolist(),
+        "feed_rate": feed_rate_compact.tolist(),
         "inject_scale": float(inject_scale),
         "basal_init": bool(basal_init),
         "basal_occupancy": float(basal_occupancy),
@@ -250,8 +288,8 @@ def make_ibm_config_from_species(
         "div_cost": uni.div_cost[idx].tolist(),
         "birth_energy": uni.birth_energy[idx].tolist(),
         # Per-species resource lists.
-        "uptake_list": [uni.uptake_list[i].tolist() for i in idx],
-        "secrete_list": [uni.secrete_list[i].tolist() for i in idx],
+        "uptake_list": uptake_compact,
+        "secrete_list": secrete_compact,
     }
 
     if overrides:
