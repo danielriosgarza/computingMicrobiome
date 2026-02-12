@@ -103,21 +103,35 @@ def _build_universe() -> _UniverseParams:
         n_primary = int(rng.integers(2, 4))
         primary = rng.choice(home_band, size=n_primary, replace=False)
 
-        # Secondary uptake: 2–5 resources from the full resource set.
+        # Secondary uptake: 1–3 resources from the full resource set.
         all_resources = np.arange(N_RESOURCES_UNIVERSE, dtype=np.int16)
-        n_secondary = int(rng.integers(2, 6))
+        n_secondary = int(rng.integers(1, 4))
         secondary = rng.choice(all_resources, size=n_secondary, replace=False)
 
         uptake = np.unique(np.concatenate([primary, secondary])).astype(np.int16)
         uptake.sort()
 
-        # Secretion: 1–3 resources from the secrete band.
-        n_secrete = int(rng.integers(1, 4))
-        # Guard against very small bands.
-        n_secrete = min(n_secrete, max(1, secrete_band.size))
-        secrete = rng.choice(secrete_band, size=n_secrete, replace=secrete_band.size < n_secrete)
-        secrete = np.unique(secrete.astype(np.int16))
-        secrete.sort()
+        # Secretion: small number of targets from the secrete band.
+        # High-band species: mostly 0 or 1 secretion target to avoid
+        # excessive mass amplification; others: 1–2 targets.
+        if s < 20:
+            # 50% chance of no secretion, otherwise exactly one target.
+            if rng.random() < 0.5:
+                secrete = np.empty(0, dtype=np.int16)
+            else:
+                secrete = rng.choice(secrete_band, size=1, replace=False).astype(np.int16)
+        else:
+            n_secrete = int(rng.integers(1, 3))
+            n_secrete = min(n_secrete, max(1, secrete_band.size))
+            secrete = rng.choice(
+                secrete_band,
+                size=n_secrete,
+                replace=secrete_band.size < n_secrete,
+            ).astype(np.int16)
+
+        if secrete.size > 0:
+            secrete = np.unique(secrete.astype(np.int16))
+            secrete.sort()
 
         uptake_list.append(uptake)
         secrete_list.append(secrete)
@@ -131,21 +145,22 @@ def _build_universe() -> _UniverseParams:
         div_cost[s] = int(rng.integers(8, 18))        # energy cost of division
         birth_energy[s] = int(rng.integers(10, 20))   # newborn energy
 
-    # External feed pattern: strong feed on a few high-band resources, weaker on
-    # some mid-band resources, almost none elsewhere.
+    # External feed pattern: modest feed on a few high-band resources, weaker on
+    # some mid-band resources, almost none elsewhere. Combined with dilution,
+    # this aims to keep total resource levels roughly bounded.
     feed_rate = np.zeros(N_RESOURCES_UNIVERSE, dtype=np.float32)
 
-    # 3 high-energy resources with strong feed.
+    # 3 high-energy resources with modest feed.
     high_feed = rng.choice(high, size=3, replace=False)
-    feed_rate[high_feed] = rng.uniform(3.0, 5.0, size=3).astype(np.float32)
+    feed_rate[high_feed] = rng.uniform(0.5, 1.5, size=3).astype(np.float32)
 
-    # 5 mid-band resources with moderate feed.
+    # 5 mid-band resources with weak feed.
     mid_feed = rng.choice(mid, size=5, replace=False)
-    feed_rate[mid_feed] = rng.uniform(0.5, 2.0, size=5).astype(np.float32)
+    feed_rate[mid_feed] = rng.uniform(0.05, 0.3, size=5).astype(np.float32)
 
     # Tiny baseline feed on a few low-band resources.
     low_feed = rng.choice(low, size=5, replace=False)
-    feed_rate[low_feed] = rng.uniform(0.05, 0.2, size=5).astype(np.float32)
+    feed_rate[low_feed] = rng.uniform(0.0, 0.05, size=5).astype(np.float32)
 
     return _UniverseParams(
         maint_cost=maint_cost,
@@ -191,7 +206,7 @@ def make_ibm_config_from_species(
     diff_numer: int = 1,
     diff_denom: int = 8,
     transport_shift: int = 0,
-    dilution_p: float = 0.01,
+    dilution_p: float = 0.02,
     inject_scale: float = 5.0,
     basal_init: bool = True,
     basal_occupancy: float = 0.6,
