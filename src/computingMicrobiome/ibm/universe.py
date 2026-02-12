@@ -20,11 +20,12 @@ The core idea:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence
+from typing import Mapping, Sequence
 
 import numpy as np
 
 from .params import EnvParams, SpeciesParams, load_params
+from .state import GridState
 
 
 # Size of the global IBM universe.
@@ -339,5 +340,53 @@ def make_env_and_species_from_species(
     )
     env, species = load_params(cfg)
     return env, species
+
+
+def make_center_column_state(
+    env: EnvParams,
+    *,
+    species_id: int = 0,
+    energy_mean: float = 4.0,
+    rng: np.random.Generator | None = None,
+) -> GridState:
+    """Initialize a grid with a single vertical column of one species.
+
+    - Only the central column is occupied (all rows).
+    - Occupied cells have energy ~ energy_mean (with small noise).
+    - Resources are initialized from basal_resource_vec / basal_resource.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    H, W = env.height, env.width_grid
+    mid = W // 2
+
+    # Occupancy: everything empty except the central column.
+    occ = np.full((H, W), -1, dtype=np.int16)
+    occ[:, mid] = int(species_id)
+
+    # Energy: around energy_mean, clipped to [0, Emax].
+    E = np.zeros((H, W), dtype=np.uint8)
+    vals = rng.normal(loc=energy_mean, scale=1.0, size=(H,))
+    vals = np.clip(vals, 0, env.Emax).astype(np.uint8)
+    E[:, mid] = vals
+
+    # Resources: use per-resource basal if available, else scalar.
+    br_vec = getattr(env, "basal_resource_vec", None)
+    if br_vec is not None:
+        br = np.asarray(br_vec, dtype=np.uint8).reshape(env.n_resources)
+        R = np.broadcast_to(
+            br[:, None, None],
+            (env.n_resources, H, W),
+        ).copy()
+    else:
+        R = np.full(
+            (env.n_resources, H, W),
+            np.uint8(env.basal_resource),
+            dtype=np.uint8,
+        )
+
+    return GridState(occ=occ, E=E, R=R)
+
 
 
