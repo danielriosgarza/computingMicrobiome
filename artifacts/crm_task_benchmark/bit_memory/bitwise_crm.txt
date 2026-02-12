@@ -1,0 +1,410 @@
+## Implementation plan: 1-individual-per-cell microbiome IBM backend integrated into `computingMicrobiome` (with dilution-driven removal)
+
+### 0) Deliverable
+
+Add a new backend to `computingMicrobiome` that implements the existing `ReservoirBackend` protocol and can be used by **all existing episode runners and benchmarks** with `reservoir_kind="ibm"`.
+
+This backend simulates a 2D lattice where each site is `EMPTY` or holds **one individual** (species ID + energy). Resources are **discrete counts** (`uint8`) per resource per cell. Update is synchronous and includes a global conflict-resolution step for births. Resource loss is **not “decay”**; instead, resources are removed by **consumption** and by **dilution/washout** (random removal), with optional feed inflow.
+
+---
+
+## 1) Integration points in the repository
+
+### 1.1 New files / modules
+
+Add:
+
+```
+src/computingMicrobiome/
+  reservoirs/
+    ibm_backend.py            # NEW: IBMReservoirBackend implements ReservoirBackend
+    factory.py                # EDIT: add kind == "ibm"
+
+  ibm/                        # NEW: core IBM logic (keep backend thin)
+    __init__.py
+    state.py                  # GridState dataclass + init helpers
+    params.py                 # SpeciesParams + EnvParams + config parsing
+    diffusion.py              # diffusion operators (deterministic MVP + optional stochastic)
+    dilution.py               # NEW: dilution/washout + optional feed inflow (replaces decay.py)
+    metabolism.py             # maintenance + uptake + secretion
+    reproduction.py           # intent generation + conflict resolution + births
+    stepper.py                # tick() composition in the correct order
+    encoding.py               # get_state() encoders + optional random projection
+```
+
+The `ibm` subpackage is auto-discovered by setuptools under `src/computingMicrobiome/`.
+
+### 1.2 Tests
+
+Add:
+
+```
+tests/
+  test_ibm_reproducible.py
+  test_ibm_bounds.py
+  test_ibm_diffusion_conserves.py
+  test_ibm_dilution_removes.py
+  test_ibm_birth_conflicts.py
+  test_ibm_protocol_alignment.py
+  test_ibm_backend_integration.py
+```
+
+### 1.3 Example task
+
+Add:
+
+```
+example_tasks/
+  task_4_learn_8_bit_with_ibm.py
+```
+
+Copy an existing task script, switch to `reservoir_kind="ibm"`, and provide an IBM-specific config.
+
+**Width and input locations:** When using IBM, the benchmark caller must pass `width = height * width_grid` (from config) so that `create_input_locations` returns valid grid indices. The IBM backend uses `np.mod(input_locations, H*W)` for robustness (as CRM does).
+
+---
+
+## 2) ReservoirBackend compliance (must match existing runner)
+
+The new backend must conform to the same interface as `eca_backend` / `crm_backend`:
+
+* `reset(rng, x0_mode)`
+* `inject(input_values, input_locations, channel_idx)` (called once per tick by runner)
+* `step(rng)` (advances IBM dynamics; **does not** inject)
+* `get_state()` returns a 1D vector of length `self.width`
+
+**Important integration constraint:**
+Your existing `episode_runner.run_reservoir_episode` already does:
+
+1. `reservoir.reset(...)`
+2. per tick: `reservoir.inject(...)` → `reservoir.step(...)` → `reservoir.get_state()`
+
+So IBM’s tick logic must be split accordingly:
+
+* `inject(...)` mutates resource fields (and optionally other state)
+* `step(...)` performs: diffusion → dilution/washout → maintenance/death → uptake/secretion → reproduction intents → conflict resolution → births
+
+---
+
+## 3) Model specification (toy biology, per cell)
+
+### 3.1 State arrays (GridState)
+
+* `occ: int16[H,W]` — `-1` empty, else species id `0..S-1`
+* `E: uint8[H,W]` — energy per occupied site (0 if empty)
+* `R: uint8[M,H,W]` — discrete resources per site (0..Rmax)
+
+Optional cached masks:
+
+* `occupied_mask: bool[H,W]` computed per step (not stored persistently)
+
+### 3.2 Species parameters (SpeciesParams)
+
+All length `S` unless noted:
+
+* `uptake_list: list[np.ndarray]` ordered resource indices per species (preferences)
+* `secrete_list: list[np.ndarray]` resource indices produced per uptake
+* `uptake_rate: uint8[S]` (max uptake attempts per tick; MVP default 1–2)
+* `yield_energy: uint8[S]` energy gained per unit uptake
+* `maint_cost: uint8[S]` energy lost per tick
+* `div_threshold: uint8[S]` reproduce if `E >= threshold`
+* `div_cost: uint8[S]` energy paid by parent on successful birth
+* `birth_energy: uint8[S]` energy assigned to offspring
+* `secrete_per_uptake: uint8[S]` units of each secreted resource per uptake
+
+### 3.3 Environment parameters (EnvParams)
+
+* `H, W, S, M`
+* `Rmax, Emax` (uint8 caps)
+* diffusion:
+
+  * MVP: deterministic conservative split with integer moves
+  * optional: stochastic diffusion later
+* dilution (replaces decay):
+
+  * `dilution_p: float` per-tick washout probability/intensity
+  * `dilution_mode: str` (MVP: `"binomial_remove"`; optional `"token_swap"`)
+  * optional inflow/feed:
+
+    * `feed: float[M]` (relative feed composition; normalized internally)
+    * `feed_rate: float` or `feed_tokens_per_cell: int`
+    * `feed_mode: str` (MVP: `"multinomial_cell"`)
+* neighborhood: 4-neighbor for births; diffusion uses 4-neighbor (wrap BC in MVP)
+* `channel_to_resource: list[int] | None` — mapping input channels → resource index; if `None`, use `m = channel_idx % M` (consistent with CRM). Other benchmarks (opcode_logic, compound_opcode, serial_adder) use different channel counts; IBM backend should accept `channel_to_resource` of length `n_channels` or `None` to use `ch % M`.
+* `inject_scale: int | float` — if float, use `int(inject_scale * input_values[ch])` or `round(...)` for discrete R; default 5
+* `inject_clip: bool` (always clip to Rmax)
+
+### 3.4 Minimal config (required keys and defaults)
+
+For benchmarks to run out of the box:
+
+* **Required:** `height`, `width_grid`, `n_species`, `n_resources`
+* **Defaults:** `Rmax=255`, `Emax=255`, `dilution_p=0.01`, `inject_scale=5`, `channel_to_resource=None` (→ use `ch % M`), species params from a simple template (e.g. all species consume all resources, `uptake_rate=1`)
+
+---
+
+## 4) IBM backend adapter design (`reservoirs/ibm_backend.py`)
+
+### 4.1 Constructor
+
+`IBMReservoirBackend(config: dict)`:
+
+* parse config into `SpeciesParams`, `EnvParams`
+* allocate `GridState` arrays
+* build state encoder (`ibm/encoding.py`) so `get_state()` is fast
+* set `self.width` deterministically:
+
+  * if projection enabled → `width = n_features`
+  * else → width from chosen encoder layout
+
+### 4.2 reset(rng, x0_mode)
+
+Support modes consistent with other backends (MVP: only `"zeros"` and `"random"` to match ECA/CRM):
+
+* `"zeros"`: empty lattice, E=0, R=0 (or background if configured)
+* `"random"`: sparse random occupancy + background resources
+* `"seeded"`: optional/future; deterministic seeding (patches, species mix, etc.)
+
+### 4.3 inject(input_values, input_locations, channel_idx)
+
+* input is shape `(n_channels,)`
+* for each injection event `i`:
+
+  * `cell = input_locations[i] → (r,c)`
+  * `ch = channel_idx[i]`; `m = channel_to_resource[ch]` if provided, else `m = ch % M`
+  * `R[m,r,c] += int(inject_scale * input_values[ch])` or `round(...)`
+* use `np.add.at` for safe accumulation
+* clip `R` to `Rmax`
+
+### 4.4 step(rng)
+
+Call `ibm.stepper.tick(state, species_params, env_params, rng)`.
+
+### 4.5 get_state()
+
+Return a 1D vector of fixed length `width`. IBM's `width` must be stable; `run_reservoir_episode` produces features of shape `(L, itr * width)`. Avoid flattening `occ` as raw integer IDs. Prefer:
+
+* flattened `E` (H*W)
+* flattened `R` (M*H*W)
+* optional species counts (S)
+  Then optional random projection.
+
+---
+
+## 5) Exact tick implementation (core IBM dynamics)
+
+Updated ordering (decay removed, dilution added):
+
+1. diffuse resources
+2. **dilution/washout of resources** (random removal; optional feed inflow)
+3. (injection already applied by `inject`, not here)
+4. maintenance, death
+5. uptake loop, secretion
+6. reproduction intents
+7. resolve conflicts
+8. apply births
+
+All steps are synchronous.
+
+---
+
+## 6) Core algorithms (MVP-first, efficient)
+
+### 6.1 Diffusion (`ibm/diffusion.py`)
+
+**MVP deterministic conservative diffusion** (fast):
+For each resource channel `m`:
+
+* `moves = (R[m] * diff_numer[m]) // diff_denom` (e.g. denom=8, numer=1)
+* `R[m] -= moves`
+* `q = moves // 4`, `rem = moves - 4*q`
+* distribute `q` equally to N,S,E,W via `np.roll`
+* distribute `rem` via fixed pattern masks (based on `(x+y)%4`)
+* wrap BC via `np.roll`
+* compute in `uint16`, clip back to `uint8` at the end
+
+### 6.2 Dilution / washout (`ibm/dilution.py`)
+
+Replace “resource decay” with chemostat-like washout:
+
+#### MVP washout (resource removal)
+
+For each resource channel `m`:
+
+* `removed = Binomial(R[m], dilution_p)` (vectorized)
+* `R[m] -= removed`
+
+This makes resources disappear only by **consumption + washout**.
+
+#### Optional MVP feed inflow (recommended if you want steady background)
+
+Add fresh medium tokens after washout:
+
+* normalize feed: `p = feed / sum(feed)`
+* per cell, draw total inflow tokens:
+
+  * `K_in = Poisson(feed_rate * dilution_p)`  **or** fixed `feed_tokens_per_cell`
+* allocate across resources:
+
+  * `adds[:,y,x] ~ Multinomial(K_in, p)` (one multinomial per cell)
+* `R[:,y,x] += adds` clipped to `Rmax`
+
+If you want the user’s exact phrasing “when added by the quantity added by dilution rate are randomly removed”:
+
+* interpret this as: inflow occurs, but an equivalent fraction is washed out stochastically each tick (the washout above already does that). If you want strict coupling, set `K_in` proportional to expected removed.
+
+**MVP simplification option:** allow `feed_rate=0` initially (pure washout).
+
+### 6.3 Maintenance + death (`ibm/metabolism.py`)
+
+Vectorized:
+
+* `occupied = occ >= 0`
+* `s = occ[occupied]`
+* `E[occupied] = max(0, E[occupied] - maint_cost[s])`
+* `dead = occupied & (E == 0)` → `occ[dead] = -1`, `E[dead] = 0`
+
+### 6.4 Uptake loop + secretion (`ibm/metabolism.py`)
+
+Deterministic uptake:
+
+* for each species `s`, indices `(ys,xs)` where `occ==s`
+* repeat `uptake_rate[s]` times:
+
+  * choose first `m` in `uptake_list[s]` where `R[m,ys,xs] > 0`
+  * for selected cells:
+
+    * `R[m] -= 1`
+    * `E += yield_energy[s]` (clip to Emax)
+    * for each byproduct `b` in `secrete_list[s]`:
+
+      * `R[b] += secrete_per_uptake[s]` (clip to Rmax)
+
+Compute in `uint16` then clip to `uint8`.
+
+### 6.5 Reproduction intents (`ibm/reproduction.py`)
+
+Eligibility:
+
+* occupied and `E >= div_threshold[occ]`
+  For each eligible parent:
+* choose random neighbor in 4-neigh (wrap BC MVP)
+* if target empty: create intent
+  Store:
+* `tgt_idx`, `par_idx`, `score`
+  Score:
+* `score = (E_parent << 16) + rand16` (energy dominates, RNG breaks ties)
+
+### 6.6 Resolve conflicts (`ibm/reproduction.py`)
+
+* sort by `(tgt_idx, -score)`
+* keep first per target
+* return winners
+
+### 6.7 Apply births (`ibm/reproduction.py`)
+
+For each winner:
+
+* set target `occ = parent_species`, `E = birth_energy[species]`
+* parent pays: `E = max(0, E - div_cost[species])`
+
+---
+
+## 7) State encoding for `get_state()` (compatible + efficient)
+
+Implement `ibm/encoding.py`:
+
+### MVP layout
+
+* `E_flat = E.astype(float32).ravel() / Emax`
+* `R_flat = R.astype(float32).reshape(M, H*W).ravel() / Rmax`
+* `species_counts` (S floats), normalized by H*W
+
+Concatenate: `[E_flat, R_flat, species_counts]`
+
+Optional:
+
+* random projection to fixed `width`
+* `normalize_state` flag
+
+---
+
+## 8) Factory integration (`reservoirs/factory.py`)
+
+Add:
+
+```python
+elif kind in ("ibm", "ibm_crm"):
+    return IBMReservoirBackend(config=reservoir_config)
+```
+
+---
+
+## 9) Tests (updated to reflect dilution instead of decay)
+
+1. `test_ibm_reproducible`
+
+* same seed + injections → identical states and identical `get_state()`
+
+2. `test_ibm_bounds`
+
+* `0<=R<=Rmax`, `0<=E<=Emax`, valid occ always
+
+3. `test_ibm_diffusion_conserves`
+
+* set `dilution_p=0`, no injection, no metabolism; diffusion-only preserves total `sum(R[m])`
+
+4. `test_ibm_dilution_removes`
+
+* set diffusion off, metabolism off, injection off
+* initialize resources; run with `dilution_p>0`
+* assert total resources decrease (in expectation) when `feed_rate=0`
+* if `feed_rate>0`, assert resources approach a steady distribution (bounded, nonnegative)
+
+5. `test_ibm_birth_conflicts`
+
+* two parents target same empty cell; correct winner selection under fixed seed
+
+6. `test_ibm_protocol_alignment`
+
+* pulse injection at known location; check state vector index changes after a step
+
+7. `test_ibm_backend_integration`
+
+* Create reservoir via `make_reservoir(reservoir_kind="ibm", reservoir_config=...)`, pass it to `run_reservoir_episode`, assert no errors and `get_state().shape == (width,)`
+
+---
+
+## 10) Milestones (agent execution order)
+
+### Milestone A: Backend scaffolding + minimal dynamics
+
+* add files + factory wiring
+* implement `reset`, `inject`, `get_state` MVP layout
+* implement diffusion + **dilution/washout** + maintenance/death
+* pass reproducibility + bounds + diffusion conservation + dilution removal tests
+
+### Milestone B: Metabolism + reproduction
+
+* implement uptake/secretion
+* implement intents/conflict resolution/births
+* pass birth conflict test
+* optional demo: invasion front with boundary injection
+
+### Milestone C: Benchmark compatibility
+
+* confirm `build_dataset_output_window_only(..., reservoir_kind="ibm")` runs end-to-end
+* add `example_tasks/task_4_learn_8_bit_with_ibm.py`
+* ensure readout training gives nontrivial accuracy
+
+---
+
+## 11) Definition of done
+
+* `make_reservoir(reservoir_kind="ibm", reservoir_config=...)` works
+* `run_reservoir_episode` runs with IBM backend
+* dataset builders + readouts run unchanged
+* example task runs and shows meaningful memory accuracy
+* tests pass
+
+If you tell me whether you want **feed inflow enabled in MVP** (`feed_rate>0`) or start with pure washout (`feed_rate=0`), I can lock the default EnvParams so the first benchmark run behaves predictably.

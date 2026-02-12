@@ -7,6 +7,7 @@ from typing import Any, Mapping
 from .base import ReservoirBackend
 from .crm_backend import CRMReservoirBackend
 from .eca_backend import ECAReservoirBackend
+from .ibm_backend import IBMReservoirBackend
 
 
 def make_reservoir(
@@ -27,4 +28,6 @@ def make_reservoir(
         return ECAReservoirBackend(rule_number=rule_number, width=width, boundary=boundary)
     if kind == "crm":
         return CRMReservoirBackend(config=reservoir_config)
-    raise ValueError("reservoir_kind must be one of {'eca', 'crm'}")
+    if kind in ("ibm", "ibm_crm"):
+        return IBMReservoirBackend(config=reservoir_config)
+    raise ValueError("reservoir_kind must be one of {'eca', 'crm', 'ibm'}")

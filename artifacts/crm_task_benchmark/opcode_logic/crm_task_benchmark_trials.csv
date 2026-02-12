@@ -1,0 +1,3 @@
+trial_id,mean_full_acc,std_full_acc,crm_height,crm_width_grid,crm_n_species,crm_n_resources,crm_proj_width,itr,recurrence,d_period,repeats,readout_C
+0,1.0,0.0,12,21,4,3,320,6,10,16,3,0.3388190084464912
+1,1.0,0.0,14,18,4,2,320,8,4,20,1,0.01708672450251875

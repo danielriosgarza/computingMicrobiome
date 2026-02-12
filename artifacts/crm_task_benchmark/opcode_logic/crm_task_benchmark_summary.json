@@ -1,0 +1,368 @@
+{
+  "task": "opcode_logic",
+  "config": {
+    "n_trials": 2,
+    "eval_repeats": 1,
+    "seed": 7,
+    "readout_kind": "svm",
+    "evaluation_mode": "full_dataset_fit_and_score",
+    "note_on_trials": "n_trials controls random-search budget; 24 is a default compromise between coverage and runtime, not a required value."
+  },
+  "top_trial": {
+    "trial_id": 0,
+    "mean_full_acc": 1.0,
+    "std_full_acc": 0.0,
+    "crm_height": 12,
+    "crm_width_grid": 21,
+    "crm_n_species": 4,
+    "crm_n_resources": 3,
+    "crm_proj_width": 320,
+    "itr": 6,
+    "recurrence": 10,
+    "d_period": 16,
+    "repeats": 3,
+    "readout_C": 0.3388190084464912,
+    "dataset_seeds": [
+      1342382291
+    ],
+    "fit_seeds": [
+      1469265225
+    ],
+    "per_run_full_acc": [
+      1.0
+    ],
+    "reservoir_config": {
+      "height": 12,
+      "width_grid": 21,
+      "n_species": 4,
+      "n_resources": 3,
+      "reaction_matrix": [
+        [
+          0.315649151802063,
+          0.43532148003578186,
+          0.28370746970176697
+        ],
+        [
+          0.05689815804362297,
+          0.39114007353782654,
+          0.20014002919197083
+        ],
+        [
+          0.23287376761436462,
+          0.03991527110338211,
+          0.08344549685716629
+        ],
+        [
+          0.3136598467826843,
+          0.45390987396240234,
+          0.22230850160121918
+        ]
+      ],
+      "consumption_matrix": [
+        [
+          0.35028520226478577,
+          0.09526485949754715,
+          0.28404781222343445
+        ],
+        [
+          0.05305497720837593,
+          0.09310147911310196,
+          0.13585041463375092
+        ],
+        [
+          0.11786957085132599,
+          0.3210913836956024,
+          0.34831127524375916
+        ],
+        [
+          0.30547255277633667,
+          0.3948138952255249,
+          0.1182539314031601
+        ]
+      ],
+      "resource_inflow": [
+        0.23438075184822083,
+        0.3670739233493805,
+        0.05495401471853256
+      ],
+      "diffusion_species": [
+        0.07536020129919052,
+        0.043547358363866806,
+        0.04682257026433945,
+        0.06933270394802094
+      ],
+      "diffusion_resources": [
+        0.010010340251028538,
+        0.08804967254400253,
+        0.052865080535411835
+      ],
+      "dt": 0.057199282020015556,
+      "dilution": 0.0216073221000481,
+      "noise_std": 0.009638281318984084,
+      "inject_scale": 0.019320247244792164,
+      "projection": {
+        "kind": "random",
+        "output_width": 320,
+        "seed": 10000,
+        "scale": 1.0
+      }
+    },
+    "dataset_kwargs": {
+      "rule_number": 110,
+      "width": 252,
+      "boundary": "periodic",
+      "recurrence": 10,
+      "itr": 6,
+      "d_period": 16,
+      "repeats": 3,
+      "feature_mode": "cue_tick",
+      "output_window": 1
+    },
+    "readout_config": {
+      "C": 0.3388190084464912,
+      "class_weight": "balanced"
+    }
+  },
+  "summaries": [
+    {
+      "trial_id": 0,
+      "mean_full_acc": 1.0,
+      "std_full_acc": 0.0,
+      "crm_height": 12,
+      "crm_width_grid": 21,
+      "crm_n_species": 4,
+      "crm_n_resources": 3,
+      "crm_proj_width": 320,
+      "itr": 6,
+      "recurrence": 10,
+      "d_period": 16,
+      "repeats": 3,
+      "readout_C": 0.3388190084464912,
+      "dataset_seeds": [
+        1342382291
+      ],
+      "fit_seeds": [
+        1469265225
+      ],
+      "per_run_full_acc": [
+        1.0
+      ],
+      "reservoir_config": {
+        "height": 12,
+        "width_grid": 21,
+        "n_species": 4,
+        "n_resources": 3,
+        "reaction_matrix": [
+          [
+            0.315649151802063,
+            0.43532148003578186,
+            0.28370746970176697
+          ],
+          [
+            0.05689815804362297,
+            0.39114007353782654,
+            0.20014002919197083
+          ],
+          [
+            0.23287376761436462,
+            0.03991527110338211,
+            0.08344549685716629
+          ],
+          [
+            0.3136598467826843,
+            0.45390987396240234,
+            0.22230850160121918
+          ]
+        ],
+        "consumption_matrix": [
+          [
+            0.35028520226478577,
+            0.09526485949754715,
+            0.28404781222343445
+          ],
+          [
+            0.05305497720837593,
+            0.09310147911310196,
+            0.13585041463375092
+          ],
+          [
+            0.11786957085132599,
+            0.3210913836956024,
+            0.34831127524375916
+          ],
+          [
+            0.30547255277633667,
+            0.3948138952255249,
+            0.1182539314031601
+          ]
+        ],
+        "resource_inflow": [
+          0.23438075184822083,
+          0.3670739233493805,
+          0.05495401471853256
+        ],
+        "diffusion_species": [
+          0.07536020129919052,
+          0.043547358363866806,
+          0.04682257026433945,
+          0.06933270394802094
+        ],
+        "diffusion_resources": [
+          0.010010340251028538,
+          0.08804967254400253,
+          0.052865080535411835
+        ],
+        "dt": 0.057199282020015556,
+        "dilution": 0.0216073221000481,
+        "noise_std": 0.009638281318984084,
+        "inject_scale": 0.019320247244792164,
+        "projection": {
+          "kind": "random",
+          "output_width": 320,
+          "seed": 10000,
+          "scale": 1.0
+        }
+      },
+      "dataset_kwargs": {
+        "rule_number": 110,
+        "width": 252,
+        "boundary": "periodic",
+        "recurrence": 10,
+        "itr": 6,
+        "d_period": 16,
+        "repeats": 3,
+        "feature_mode": "cue_tick",
+        "output_window": 1
+      },
+      "readout_config": {
+        "C": 0.3388190084464912,
+        "class_weight": "balanced"
+      }
+    },
+    {
+      "trial_id": 1,
+      "mean_full_acc": 1.0,
+      "std_full_acc": 0.0,
+      "crm_height": 14,
+      "crm_width_grid": 18,
+      "crm_n_species": 4,
+      "crm_n_resources": 2,
+      "crm_proj_width": 320,
+      "itr": 8,
+      "recurrence": 4,
+      "d_period": 20,
+      "repeats": 1,
+      "readout_C": 0.01708672450251875,
+      "dataset_seeds": [
+        1241873584
+      ],
+      "fit_seeds": [
+        1665772334
+      ],
+      "per_run_full_acc": [
+        1.0
+      ],
+      "reservoir_config": {
+        "height": 14,
+        "width_grid": 18,
+        "n_species": 4,
+        "n_resources": 2,
+        "reaction_matrix": [
+          [
+            0.44441595673561096,
+            0.07107807695865631
+          ],
+          [
+            0.31284216046333313,
+            0.34563201665878296
+          ],
+          [
+            0.3513871431350708,
+            0.21713870763778687
+          ],
+          [
+            0.060701701790094376,
+            0.04015536233782768
+          ]
+        ],
+        "consumption_matrix": [
+          [
+            0.18410544097423553,
+            0.37895506620407104
+          ],
+          [
+            0.15644113719463348,
+            0.32151108980178833
+          ],
+          [
+            0.32621878385543823,
+            0.3667454123497009
+          ],
+          [
+            0.16080054640769958,
+            0.06746900826692581
+          ]
+        ],
+        "resource_inflow": [
+          0.2872658669948578,
+          0.1604996621608734
+        ],
+        "diffusion_species": [
+          0.049317438155412674,
+          0.06434925645589828,
+          0.02699430286884308,
+          0.005847922060638666
+        ],
+        "diffusion_resources": [
+          0.06640473008155823,
+          0.023210683837532997
+        ],
+        "dt": 0.04494349313502999,
+        "dilution": 0.028685568443985267,
+        "noise_std": 0.0019093730626376663,
+        "inject_scale": 0.06701763660657936,
+        "projection": {
+          "kind": "random",
+          "output_width": 320,
+          "seed": 10001,
+          "scale": 1.0
+        }
+      },
+      "dataset_kwargs": {
+        "rule_number": 110,
+        "width": 252,
+        "boundary": "periodic",
+        "recurrence": 4,
+        "itr": 8,
+        "d_period": 20,
+        "repeats": 1,
+        "feature_mode": "cue_tick",
+        "output_window": 1
+      },
+      "readout_config": {
+        "C": 0.01708672450251875,
+        "class_weight": "balanced"
+      }
+    }
+  ],
+  "extras": {
+    "per_run": [
+      {
+        "trial_id": 0,
+        "repeat_idx": 0,
+        "dataset_seed": 1342382291,
+        "fit_seed": 1469265225,
+        "full_acc": 1.0,
+        "n_rows": 32
+      },
+      {
+        "trial_id": 1,
+        "repeat_idx": 0,
+        "dataset_seed": 1241873584,
+        "fit_seed": 1665772334,
+        "full_acc": 1.0,
+        "n_rows": 32
+      }
+    ]
+  }
+}
