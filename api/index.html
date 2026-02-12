@@ -20277,7 +20277,7 @@ positions are sampled without replacement in each segment.</p>
 
 
 <h2 id="computingMicrobiome.plot_utils.plot_red_green_grid" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">plot_red_green_grid</span><span class="p">(</span><span class="n">correctness</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">plot_red_green_grid</span><span class="p">(</span><span class="n">correctness</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">show</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></code>
 
 </h2>
 
@@ -20328,6 +20328,45 @@ positions are sampled without replacement in each segment.</p>
             </td>
             <td>
                   <code>&#39;&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>show</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether to call plt.show().</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="matplotlib.pyplot.Figure">Figure</span>, <span title="matplotlib.pyplot.Axes">Axes</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Tuple[plt.Figure, plt.Axes]: Figure and axes containing the plot.</p>
+              </div>
             </td>
           </tr>
       </tbody>
