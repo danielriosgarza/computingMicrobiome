@@ -155,6 +155,39 @@ def test_ibm_birth_conflicts() -> None:
     assert int(state.E[0, 2]) == 40
 
 
+def test_ibm_invasion_replaces_occupied_neighbor() -> None:
+    env, species = load_params(
+        {
+            "height": 1,
+            "width_grid": 2,
+            "n_species": 2,
+            "n_resources": 1,
+            "allow_invasion": True,
+            "invasion_energy_margin": 0,
+            "div_threshold": [10, 255],  # species 1 cannot reproduce
+            "div_cost": [0, 0],
+            "birth_energy": [7, 7],
+        }
+    )
+    state = GridState(
+        occ=np.array([[0, 1]], dtype=np.int16),
+        E=np.array([[50, 20]], dtype=np.uint8),
+        R=np.zeros((1, 1, 2), dtype=np.uint8),
+    )
+
+    rng = _DummyRNG(
+        [
+            np.array([1], dtype=np.int16),  # species 0 parent -> right
+            np.array([42], dtype=np.int64),  # random tie-break component
+        ]
+    )
+    apply_reproduction(state, species, env, rng)  # type: ignore[arg-type]
+
+    # Occupied target is replaced by offspring species 0.
+    assert int(state.occ[0, 1]) == 0
+    assert int(state.E[0, 1]) == 7
+
+
 def test_ibm_protocol_alignment() -> None:
     cfg = {"height": 3, "width_grid": 4, "n_species": 2, "n_resources": 2}
     reservoir = make_reservoir(

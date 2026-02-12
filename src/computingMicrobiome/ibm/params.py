@@ -39,6 +39,8 @@ class EnvParams:
     feed_rate: np.ndarray
     inject_scale: float
     channel_to_resource: np.ndarray | None
+    allow_invasion: bool
+    invasion_energy_margin: int
     basal_init: bool
     basal_occupancy: float
     basal_energy: int
@@ -159,6 +161,11 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
         if np.any(channel_to_resource < 0) or np.any(channel_to_resource >= n_resources):
             raise ValueError("channel_to_resource values must be in [0, n_resources)")
 
+    allow_invasion = bool(cfg.get("allow_invasion", False))
+    invasion_energy_margin = int(cfg.get("invasion_energy_margin", 0))
+    if invasion_energy_margin < 0:
+        raise ValueError("invasion_energy_margin must be >= 0")
+
     basal_init = bool(cfg.get("basal_init", False))
     basal_occupancy = float(cfg.get("basal_occupancy", 1.0))
     if not (0.0 <= basal_occupancy <= 1.0):
@@ -256,6 +263,8 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
         feed_rate=feed_rate,
         inject_scale=inject_scale,
         channel_to_resource=channel_to_resource,
+        allow_invasion=allow_invasion,
+        invasion_energy_margin=int(np.clip(invasion_energy_margin, 0, Emax)),
         basal_init=basal_init,
         basal_occupancy=basal_occupancy,
         basal_energy=int(np.clip(basal_energy, 0, Emax)),

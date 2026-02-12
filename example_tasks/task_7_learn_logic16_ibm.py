@@ -53,6 +53,8 @@ SEED_TRAIN = 0
 IBM_DIFF_NUMER = 1
 IBM_DILUTION_P = 0.02
 IBM_INJECT_SCALE = 2.0
+IBM_ALLOW_INVASION = True
+IBM_INVASION_MARGIN = 0
 
 OUT_DIR = pathlib.Path(__file__).resolve().parent / "task_7_artifacts"
 OUT_DIR.mkdir(exist_ok=True)
@@ -75,6 +77,9 @@ IBM_CFG = make_ibm_config_from_species(
         "inject_scale": IBM_INJECT_SCALE,
         "dilution_p": IBM_DILUTION_P,
         "diff_numer": IBM_DIFF_NUMER,
+        # Allow offspring to replace occupied neighbors when competitive.
+        "allow_invasion": IBM_ALLOW_INVASION,
+        "invasion_energy_margin": IBM_INVASION_MARGIN,
     },
 )
 

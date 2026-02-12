@@ -38,7 +38,21 @@ def apply_reproduction(
         tr = (rr + dr[dirs]) % H
         tc = (cc + dc[dirs]) % W
 
-        can_birth = occ[tr, tc] == -1
+        target_occ = occ[tr, tc]
+        can_birth = target_occ == -1
+        if env.allow_invasion:
+            # Optional invasion mode: permit offspring to replace an occupied
+            # neighbor of a different species if parent energy is sufficiently
+            # higher than target energy.
+            can_invade = (
+                (target_occ >= 0)
+                & (target_occ != s)
+                & (
+                    E_work[rr, cc]
+                    >= (E_work[tr, tc] + int(env.invasion_energy_margin))
+                )
+            )
+            can_birth = can_birth | can_invade
         if not np.any(can_birth):
             continue
 
