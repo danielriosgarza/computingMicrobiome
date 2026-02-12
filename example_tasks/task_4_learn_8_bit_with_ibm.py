@@ -9,6 +9,7 @@ from computingMicrobiome.benchmarks.k_bit_memory_bm import (
     evaluate_memory_trials,
 )
 from computingMicrobiome.readouts.factory import make_readout
+from computingMicrobiome.ibm import make_ibm_config_from_species
 
 BITS = 8
 BOUNDARY = "periodic"
@@ -21,27 +22,24 @@ N_TRIALS = 100
 # For this benchmark, each tick is separated by (ITR + 1) steps.
 TRACE_DEPTH = (D_PERIOD + BITS) * (ITR + 1) + 8
 
-IBM_CFG = {
-    "height": 8,
-    "width_grid": 8,
-    "n_species": 1,
-    "n_resources": 1,
-    "Rmax": 255,
-    "Emax": 255,
-    "dilution_p": 0.0,
-    "inject_scale": 0.0,
-    "diff_numer": 0,
-    "state_width_mode": "raw",
-    "input_trace_depth": TRACE_DEPTH,
-    "input_trace_channels": 4,
-    "input_trace_decay": 1.0,
-    "maint_cost": [0],
-    "uptake_rate": [0],
-    "yield_energy": [0],
-    "div_threshold": [255],
-    "div_cost": [0],
-    "birth_energy": [0],
-}
+IBM_CFG = make_ibm_config_from_species(
+    # Use a small subset of the global IBM universe for this task.
+    species_indices=[0, 1, 2],
+    height=8,
+    width_grid=8,
+    # Keep the same reservoir-backend specific settings as before.
+    overrides={
+        "state_width_mode": "raw",
+        "input_trace_depth": TRACE_DEPTH,
+        "input_trace_channels": 4,
+        "input_trace_decay": 1.0,
+        # For this benchmark we do not inject additional resources from the
+        # input signal; all dynamics come from the universe defaults.
+        "inject_scale": 0.0,
+        "dilution_p": 0.0,
+        "diff_numer": 0,
+    },
+)
 
 
 def main() -> None:
