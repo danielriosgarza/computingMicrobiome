@@ -43,6 +43,10 @@ class EnvParams:
     basal_occupancy: float
     basal_energy: int
     basal_resource: int
+    # Optional per-resource basal levels (length n_resources). When provided,
+    # this should be preferred over the scalar `basal_resource` for initializing
+    # resource fields. Older configs that only specify a scalar remain valid.
+    basal_resource_vec: np.ndarray | None
     basal_pattern: str
 
 
@@ -160,7 +164,20 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
     if not (0.0 <= basal_occupancy <= 1.0):
         raise ValueError("basal_occupancy must be in [0, 1]")
     basal_energy = int(cfg.get("basal_energy", 12))
-    basal_resource = int(cfg.get("basal_resource", 2))
+
+    # Support both scalar and per-resource basal_resource specifications.
+    raw_basal = cfg.get("basal_resource", 2)
+    if np.isscalar(raw_basal):
+        basal_resource = int(raw_basal)
+        basal_resource_vec = np.full(n_resources, basal_resource, dtype=np.uint8)
+    else:
+        arr = np.asarray(raw_basal, dtype=np.int16).reshape(-1)
+        if arr.size != n_resources:
+            raise ValueError("basal_resource sequence must have length n_resources")
+        basal_resource_vec = np.clip(arr, 0, Rmax).astype(np.uint8)
+        # Use the mean as a representative scalar for backwards-compatible
+        # consumers that still read `basal_resource`.
+        basal_resource = int(basal_resource_vec.mean())
     basal_pattern = str(cfg.get("basal_pattern", "checkerboard")).strip().lower()
     if basal_pattern not in {"checkerboard", "stripes"}:
         raise ValueError("basal_pattern must be one of {'checkerboard', 'stripes'}")
@@ -243,6 +260,7 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
         basal_occupancy=basal_occupancy,
         basal_energy=int(np.clip(basal_energy, 0, Emax)),
         basal_resource=int(np.clip(basal_resource, 0, Rmax)),
+        basal_resource_vec=basal_resource_vec,
         basal_pattern=basal_pattern,
     )
 

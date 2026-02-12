@@ -277,6 +277,14 @@ def make_ibm_config_from_species(
         uptake_compact.append(u_mapped)
         secrete_compact.append(s_mapped)
 
+    # Build a low per-resource basal level aligned with the feed pattern.
+    if feed_rate_compact.size > 0 and float(feed_rate_compact.max()) > 0.0:
+        max_basal = max(1.0, min(5.0, Rmax / 20.0))
+        scaled = feed_rate_compact.astype(np.float32) / float(feed_rate_compact.max())
+        basal_vec = np.rint(scaled * max_basal).astype(np.int16)
+    else:
+        basal_vec = np.zeros(n_resources, dtype=np.int16)
+
     cfg: dict[str, object] = {
         "height": int(height),
         "width_grid": int(width_grid),
@@ -293,7 +301,9 @@ def make_ibm_config_from_species(
         "basal_init": bool(basal_init),
         "basal_occupancy": float(basal_occupancy),
         "basal_energy": int(basal_energy),
-        "basal_resource": int(basal_resource),
+        # Use per-resource basal levels to roughly align the initial condition
+        # with the feed pattern, while keeping them globally low.
+        "basal_resource": basal_vec.tolist(),
         "basal_pattern": str(basal_pattern),
         # Per-species scalar parameters.
         "maint_cost": uni.maint_cost[idx].tolist(),

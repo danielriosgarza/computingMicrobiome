@@ -96,11 +96,21 @@ class IBMReservoirBackend:
             if self.env.basal_energy > 0:
                 E[occupied] = np.uint8(self.env.basal_energy)
 
-            R = np.full(
-                (self.n_resources, self.height, self.width_grid),
-                np.uint8(self.env.basal_resource),
-                dtype=np.uint8,
-            )
+            # Initialize resources using per-resource basal levels if available,
+            # otherwise fall back to the scalar basal_resource.
+            br_vec = getattr(self.env, "basal_resource_vec", None)
+            if br_vec is not None:
+                br = np.asarray(br_vec, dtype=np.uint8).reshape(self.n_resources)
+                R = np.broadcast_to(
+                    br[:, None, None],
+                    (self.n_resources, self.height, self.width_grid),
+                ).copy()
+            else:
+                R = np.full(
+                    (self.n_resources, self.height, self.width_grid),
+                    np.uint8(self.env.basal_resource),
+                    dtype=np.uint8,
+                )
             self._state = GridState(occ=occ, E=E, R=R)
             return
         if x0_mode == "random":
