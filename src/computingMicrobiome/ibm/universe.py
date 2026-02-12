@@ -324,6 +324,30 @@ def make_ibm_config_from_species(
     return cfg
 
 
+def make_channel_to_resource_from_config(
+    config: Mapping[str, object],
+    n_channels: int,
+) -> list[int]:
+    """Build a channel-to-resource mapping using only resources in the reservoir.
+
+    The config's ``n_resources`` is the compacted set of resources (from the
+    selected species). Each input channel is mapped to one of these resource
+    indices so that injection uses actual reservoir metabolites.
+
+    Args:
+        config: IBM config dict with key ``n_resources``.
+        n_channels: Number of input channels (e.g. 10 for logic16).
+
+    Returns:
+        List of length n_channels: channel i maps to resource index
+        in [0, n_resources), cycling if n_channels > n_resources.
+    """
+    n_resources = int(config["n_resources"])
+    if n_resources < 1:
+        raise ValueError("config must have n_resources >= 1")
+    return [i % n_resources for i in range(n_channels)]
+
+
 def make_env_and_species_from_species(
     species_indices: Sequence[int] | None = None,
     *,

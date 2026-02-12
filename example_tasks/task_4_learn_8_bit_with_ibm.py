@@ -17,7 +17,10 @@ from computingMicrobiome.benchmarks.k_bit_memory_bm import (
     build_dataset_output_window_only,
     evaluate_memory_trials,
 )
-from computingMicrobiome.ibm import make_ibm_config_from_species
+from computingMicrobiome.ibm import (
+    make_channel_to_resource_from_config,
+    make_ibm_config_from_species,
+)
 from computingMicrobiome.plot_utils import plot_red_green_grid
 from computingMicrobiome.readouts.factory import make_readout
 
@@ -38,23 +41,33 @@ OUT_DIR.mkdir(exist_ok=True)
 # For this benchmark, each tick is separated by (ITR + 1) steps.
 TRACE_DEPTH = (D_PERIOD + BITS) * (ITR + 1) + 8
 
+# Number of input channels for the 8-bit memory benchmark.
+N_CHANNELS = 4
+
+# IBM reservoir dynamics: small diffusion/dilution and replace-mode injection.
+IBM_DIFF_NUMER = 1
+IBM_DILUTION_P = 0.02
+IBM_INJECT_SCALE = 2.0
+
 IBM_CFG = make_ibm_config_from_species(
-    # Use a small subset of the global IBM universe for this task.
     species_indices=[0, 1, 2],
     height=8,
     width_grid=8,
-    # Keep reservoir-backend specific settings aligned with this benchmark.
     overrides={
         "state_width_mode": "raw",
         "input_trace_depth": TRACE_DEPTH,
-        "input_trace_channels": 4,
+        "input_trace_channels": N_CHANNELS,
         "input_trace_decay": 1.0,
-        # For this benchmark we do not inject additional resources from input.
-        "inject_scale": 0.0,
-        "dilution_p": 0.0,
-        "diff_numer": 0,
+        "inject_scale": IBM_INJECT_SCALE,
+        "dilution_p": IBM_DILUTION_P,
+        "diff_numer": IBM_DIFF_NUMER,
     },
 )
+# Map each input channel to a resource that exists in the reservoir.
+IBM_CFG["channel_to_resource"] = make_channel_to_resource_from_config(
+    IBM_CFG, N_CHANNELS
+)
+IBM_CFG["inject_mode"] = "replace"
 
 
 def main() -> None:

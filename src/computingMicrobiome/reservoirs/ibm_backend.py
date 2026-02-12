@@ -49,6 +49,10 @@ class IBMReservoirBackend:
             raise ValueError("input_trace_depth requires state_width_mode='raw'")
         self._trace_width = self._trace_depth * self._trace_channels
 
+        self._inject_mode = str(cfg.get("inject_mode", "replace")).strip().lower()
+        if self._inject_mode not in ("add", "replace"):
+            raise ValueError("inject_mode must be 'add' or 'replace'")
+
         if self._state_width_mode == "cells":
             self.width = self._cells
         else:
@@ -177,7 +181,12 @@ class IBMReservoirBackend:
             m_idx = mapping[ch % mapping.size].astype(np.int64, copy=False)
 
         R_work = self._state.R.astype(np.int32, copy=True)
-        np.add.at(R_work, (m_idx, rr, cc), add)
+        if self._inject_mode == "replace":
+            # Set resource at injection sites to the injected value so the
+            # input signal is clearly visible (no adding on top of basal).
+            R_work[m_idx, rr, cc] = add
+        else:
+            np.add.at(R_work, (m_idx, rr, cc), add)
         self._state.R = np.clip(R_work, 0, self.env.Rmax).astype(np.uint8)
 
     def step(self, rng: np.random.Generator) -> None:

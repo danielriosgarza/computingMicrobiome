@@ -12,7 +12,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from computingMicrobiome.benchmarks.k_opcode_logic16_bm import N_CHANNELS, apply_opcode
-from computingMicrobiome.ibm import make_ibm_config_from_species
+from computingMicrobiome.ibm import (
+    make_channel_to_resource_from_config,
+    make_ibm_config_from_species,
+)
 from computingMicrobiome.models.k_opcode_logic16 import KOpcodeLogic16
 from computingMicrobiome.plot_utils import plot_red_green_grid
 
@@ -73,15 +76,20 @@ IBM_CFG = make_ibm_config_from_species(
         "input_trace_depth": TRACE_DEPTH,
         "input_trace_channels": N_CHANNELS,
         "input_trace_decay": 1.0,
-        # Enable IBM dynamics and allow inputs to perturb the state.
         "inject_scale": IBM_INJECT_SCALE,
         "dilution_p": IBM_DILUTION_P,
         "diff_numer": IBM_DIFF_NUMER,
-        # Allow offspring to replace occupied neighbors when competitive.
         "allow_invasion": IBM_ALLOW_INVASION,
         "invasion_energy_margin": IBM_INVASION_MARGIN,
     },
 )
+# Map each input channel to a resource that exists in the reservoir
+# (compacted list from the selected species).
+IBM_CFG["channel_to_resource"] = make_channel_to_resource_from_config(
+    IBM_CFG, N_CHANNELS
+)
+# Replace resource at injection sites (clear signal) instead of adding.
+IBM_CFG["inject_mode"] = "replace"
 
 WIDTH = int(IBM_CFG["height"]) * int(IBM_CFG["width_grid"])
 # For create_input_locations(width, recurrence, input_channels), we need:
