@@ -1,4 +1,4 @@
-"""Task 5 - Learn the 4-bit opcode logic task using Rule 110.
+"""Task 6 - Learn the 4-bit opcode logic task using Rule 90.
 
 Train a readout on all 64 opcode/operand combinations, report performance,
 and save both a histogram and a red/green correctness heatmap.
@@ -35,7 +35,7 @@ OPS = {
 }
 
 # Parameters
-RULE_NUMBER = 110
+RULE_NUMBER = 90
 WIDTH = 256
 BOUNDARY = "periodic"
 RECURRENCE = 8
@@ -46,7 +46,7 @@ FEATURE_MODE = "cue_tick"
 OUTPUT_WINDOW = 2
 SEED_TRAIN = 0
 
-OUT_DIR = pathlib.Path(__file__).resolve().parent / "task_5_artifacts"
+OUT_DIR = pathlib.Path(__file__).resolve().parent / "task_6_artifacts"
 OUT_DIR.mkdir(exist_ok=True)
 
 
@@ -56,7 +56,7 @@ def bits4(op: int) -> list[int]:
 
 def main() -> None:
     print(
-        "Training Rule 110 model for logic16 task "
+        "Training Rule 90 model for logic16 task "
         f"(width={WIDTH}, d_period={D_PERIOD}) ..."
     )
     model = KOpcodeLogic16(
@@ -131,7 +131,7 @@ def main() -> None:
     )
     ax_hist.set_xlabel("Per-opcode accuracy", fontsize=12)
     ax_hist.set_ylabel("Number of opcodes", fontsize=12)
-    ax_hist.set_title("Logic16 Task - Rule 110 ECA + SVM", fontsize=13)
+    ax_hist.set_title("Logic16 Task - Rule 90 ECA + SVM", fontsize=13)
     ax_hist.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
     ax_hist.set_xlim(-0.05, 1.05)
     ax_hist.axvline(
@@ -144,7 +144,7 @@ def main() -> None:
     ax_hist.legend(fontsize=11)
     fig_hist.tight_layout()
 
-    hist_path = OUT_DIR / "task_5_opcode_accuracy_histogram.png"
+    hist_path = OUT_DIR / "task_6_opcode_accuracy_histogram.png"
     fig_hist.savefig(hist_path, dpi=150)
     print(f"\nHistogram saved to {hist_path}")
 
@@ -161,7 +161,7 @@ def main() -> None:
     ax_heat.set_yticklabels([str(i) for i in range(16)])
     fig_heat.tight_layout()
 
-    heatmap_path = OUT_DIR / "task_5_opcode_operand_heatmap.png"
+    heatmap_path = OUT_DIR / "task_6_opcode_operand_heatmap.png"
     fig_heat.savefig(heatmap_path, dpi=150)
     print(f"Heatmap saved to {heatmap_path}")
 

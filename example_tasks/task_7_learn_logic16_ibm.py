@@ -1,4 +1,4 @@
-"""Task 5 - Learn the 4-bit opcode logic task using Rule 110.
+"""Task 7 - Learn the 4-bit opcode logic task with an IBM reservoir.
 
 Train a readout on all 64 opcode/operand combinations, report performance,
 and save both a histogram and a red/green correctness heatmap.
@@ -11,7 +11,8 @@ import pathlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from computingMicrobiome.benchmarks.k_opcode_logic16_bm import apply_opcode
+from computingMicrobiome.benchmarks.k_opcode_logic16_bm import N_CHANNELS, apply_opcode
+from computingMicrobiome.ibm import make_ibm_config_from_species
 from computingMicrobiome.models.k_opcode_logic16 import KOpcodeLogic16
 from computingMicrobiome.plot_utils import plot_red_green_grid
 
@@ -35,10 +36,9 @@ OPS = {
 }
 
 # Parameters
-RULE_NUMBER = 110
-WIDTH = 256
 BOUNDARY = "periodic"
-RECURRENCE = 8
+# Target recurrence used when lattice width allows it.
+RECURRENCE_TARGET = 8
 ITR = 8
 D_PERIOD = 200
 REPEATS = 1
@@ -46,8 +46,42 @@ FEATURE_MODE = "cue_tick"
 OUTPUT_WINDOW = 2
 SEED_TRAIN = 0
 
-OUT_DIR = pathlib.Path(__file__).resolve().parent / "task_5_artifacts"
+# IBM reservoir dynamical parameters
+# Use small but non-zero diffusion and dilution so that metabolite
+# concentrations evolve, and a modest inject_scale so inputs actually
+# perturb the IBM state.
+IBM_DIFF_NUMER = 1
+IBM_DILUTION_P = 0.02
+IBM_INJECT_SCALE = 2.0
+
+OUT_DIR = pathlib.Path(__file__).resolve().parent / "task_7_artifacts"
 OUT_DIR.mkdir(exist_ok=True)
+
+# For logic16, stream length is: repeats * 6 write packets + d_period + cue.
+LOGIC16_STREAM_LEN = (REPEATS * 6) + D_PERIOD + 1
+# Convert ticks to simulation-step trace depth used by IBM trace channels.
+TRACE_DEPTH = LOGIC16_STREAM_LEN * (ITR + 1) + 8
+
+IBM_CFG = make_ibm_config_from_species(
+    species_indices=[0, 1, 2, 4, 5, 6],
+    height=8,
+    width_grid=8,
+    overrides={
+        "state_width_mode": "raw",
+        "input_trace_depth": TRACE_DEPTH,
+        "input_trace_channels": N_CHANNELS,
+        "input_trace_decay": 1.0,
+        # Enable IBM dynamics and allow inputs to perturb the state.
+        "inject_scale": IBM_INJECT_SCALE,
+        "dilution_p": IBM_DILUTION_P,
+        "diff_numer": IBM_DIFF_NUMER,
+    },
+)
+
+WIDTH = int(IBM_CFG["height"]) * int(IBM_CFG["width_grid"])
+# For create_input_locations(width, recurrence, input_channels), we need:
+# input_channels <= width // recurrence.
+RECURRENCE = min(RECURRENCE_TARGET, max(1, WIDTH // N_CHANNELS))
 
 
 def bits4(op: int) -> list[int]:
@@ -56,11 +90,12 @@ def bits4(op: int) -> list[int]:
 
 def main() -> None:
     print(
-        "Training Rule 110 model for logic16 task "
-        f"(width={WIDTH}, d_period={D_PERIOD}) ..."
+        "Training IBM model for logic16 task "
+        f"(cells={WIDTH}, d_period={D_PERIOD}, trace_depth={TRACE_DEPTH}) ..."
     )
     model = KOpcodeLogic16(
-        rule_number=RULE_NUMBER,
+        # Required by the generic API; ignored by IBM backend.
+        rule_number=110,
         width=WIDTH,
         boundary=BOUNDARY,
         recurrence=RECURRENCE,
@@ -71,6 +106,9 @@ def main() -> None:
         output_window=OUTPUT_WINDOW,
         seed=SEED_TRAIN,
         readout_kind="svm",
+        readout_config={"C": 10.0, "class_weight": "balanced"},
+        reservoir_kind="ibm",
+        reservoir_config=IBM_CFG,
     ).fit()
     print("Training complete.\n")
 
@@ -131,7 +169,7 @@ def main() -> None:
     )
     ax_hist.set_xlabel("Per-opcode accuracy", fontsize=12)
     ax_hist.set_ylabel("Number of opcodes", fontsize=12)
-    ax_hist.set_title("Logic16 Task - Rule 110 ECA + SVM", fontsize=13)
+    ax_hist.set_title("Logic16 Task - IBM Reservoir + SVM", fontsize=13)
     ax_hist.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
     ax_hist.set_xlim(-0.05, 1.05)
     ax_hist.axvline(
@@ -144,7 +182,7 @@ def main() -> None:
     ax_hist.legend(fontsize=11)
     fig_hist.tight_layout()
 
-    hist_path = OUT_DIR / "task_5_opcode_accuracy_histogram.png"
+    hist_path = OUT_DIR / "task_7_opcode_accuracy_histogram.png"
     fig_hist.savefig(hist_path, dpi=150)
     print(f"\nHistogram saved to {hist_path}")
 
@@ -161,7 +199,7 @@ def main() -> None:
     ax_heat.set_yticklabels([str(i) for i in range(16)])
     fig_heat.tight_layout()
 
-    heatmap_path = OUT_DIR / "task_5_opcode_operand_heatmap.png"
+    heatmap_path = OUT_DIR / "task_7_opcode_operand_heatmap.png"
     fig_heat.savefig(heatmap_path, dpi=150)
     print(f"Heatmap saved to {heatmap_path}")
 
