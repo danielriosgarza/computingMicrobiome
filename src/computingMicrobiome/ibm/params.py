@@ -15,6 +15,8 @@ class SpeciesParams:
     maint_cost: np.ndarray
     uptake_rate: np.ndarray
     uptake_list: tuple[np.ndarray, ...]
+    popular_uptake_list: tuple[np.ndarray, ...]
+    secondary_uptake: np.ndarray
     secrete_list: tuple[np.ndarray, ...]
     yield_energy: np.ndarray
     div_threshold: np.ndarray
@@ -74,6 +76,40 @@ def _coerce_resource_list(v: Any, n_resources: int, *, key: str) -> np.ndarray:
     if np.any(arr < 0) or np.any(arr >= n_resources):
         raise ValueError(f"{key} values must be in [0, n_resources)")
     return arr
+
+
+def _dedupe_resource_list(arr: np.ndarray) -> np.ndarray:
+    if arr.size < 2:
+        return arr.copy()
+    out: list[int] = []
+    seen: set[int] = set()
+    for x in arr.tolist():
+        val = int(x)
+        if val in seen:
+            continue
+        seen.add(val)
+        out.append(val)
+    return np.asarray(out, dtype=np.int16)
+
+
+def _read_species_optional_resource_scalar(
+    cfg: Mapping[str, Any],
+    key: str,
+    n_species: int,
+    n_resources: int,
+) -> np.ndarray:
+    raw = cfg.get(key)
+    if raw is None:
+        return np.full(n_species, -1, dtype=np.int16)
+    if np.isscalar(raw):
+        out = np.full(n_species, int(raw), dtype=np.int16)
+    else:
+        out = np.asarray(raw, dtype=np.int16).reshape(-1)
+        if out.size != n_species:
+            raise ValueError(f"{key} must be scalar or length n_species")
+    if np.any(out < -1) or np.any(out >= n_resources):
+        raise ValueError(f"{key} values must be -1 or in [0, n_resources)")
+    return out.copy()
 
 
 def _read_species_resource_lists(
@@ -211,6 +247,33 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
         default_all_resources=False,
     )
 
+    raw_popular = cfg.get("popular_uptake_list")
+    if raw_popular is None:
+        popular_uptake_list = [np.empty(0, dtype=np.int16) for _ in range(n_species)]
+    else:
+        popular_global = _dedupe_resource_list(
+            _coerce_resource_list(
+                raw_popular,
+                n_resources,
+                key="popular_uptake_list",
+            )
+        )
+        popular_uptake_list = []
+        for s in range(n_species):
+            allowed = set(int(x) for x in uptake_list[s].tolist())
+            popular_s = np.asarray(
+                [int(m) for m in popular_global.tolist() if int(m) in allowed],
+                dtype=np.int16,
+            )
+            popular_uptake_list.append(popular_s)
+
+    secondary_uptake = _read_species_optional_resource_scalar(
+        cfg,
+        "secondary_uptake",
+        n_species,
+        n_resources,
+    )
+
     species_cfg = cfg.get("species") or cfg.get("species_params")
     if species_cfg is not None:
         if not isinstance(species_cfg, Sequence) or len(species_cfg) != n_species:
@@ -241,6 +304,16 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
                     n_resources,
                     key="secrete_list",
                 )
+            if "popular_uptake_list" in entry:
+                popular_uptake_list[s] = _dedupe_resource_list(
+                    _coerce_resource_list(
+                        entry["popular_uptake_list"],
+                        n_resources,
+                        key="popular_uptake_list",
+                    )
+                )
+            if "secondary_uptake" in entry:
+                secondary_uptake[s] = int(entry["secondary_uptake"])
 
     maint_cost = np.clip(maint_cost, 0, Emax).astype(np.uint8)
     uptake_rate = np.clip(uptake_rate, 0, 255).astype(np.int16)
@@ -248,6 +321,23 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
     div_threshold = np.clip(div_threshold, 0, Emax).astype(np.uint8)
     div_cost = np.clip(div_cost, 0, Emax).astype(np.uint8)
     birth_energy = np.clip(birth_energy, 0, Emax).astype(np.uint8)
+    if np.any(secondary_uptake < -1) or np.any(secondary_uptake >= n_resources):
+        raise ValueError("secondary_uptake values must be -1 or in [0, n_resources)")
+
+    for s in range(n_species):
+        allowed = set(int(x) for x in uptake_list[s].tolist())
+        pop = popular_uptake_list[s]
+        if pop.size > 0:
+            invalid_pop = [int(x) for x in pop.tolist() if int(x) not in allowed]
+            if invalid_pop:
+                raise ValueError(
+                    f"popular_uptake_list for species {s} must be subset of uptake_list"
+                )
+        sec = int(secondary_uptake[s])
+        if sec >= 0 and sec not in allowed:
+            raise ValueError(
+                f"secondary_uptake for species {s} must be in uptake_list or -1"
+            )
 
     env = EnvParams(
         height=height,
@@ -277,6 +367,8 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
         maint_cost=maint_cost,
         uptake_rate=uptake_rate,
         uptake_list=tuple(arr.copy() for arr in uptake_list),
+        popular_uptake_list=tuple(arr.copy() for arr in popular_uptake_list),
+        secondary_uptake=secondary_uptake.astype(np.int16, copy=True),
         secrete_list=tuple(arr.copy() for arr in secrete_list),
         yield_energy=yield_energy,
         div_threshold=div_threshold,

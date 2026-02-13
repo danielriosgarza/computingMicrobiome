@@ -45,6 +45,8 @@ class _UniverseParams:
     birth_energy: np.ndarray
     uptake_list: tuple[np.ndarray, ...]
     secrete_list: tuple[np.ndarray, ...]
+    popular_primary: np.ndarray
+    secondary_preference: np.ndarray
     feed_rate: np.ndarray
 
 
@@ -84,6 +86,13 @@ def _build_universe() -> _UniverseParams:
     div_threshold = np.zeros(N_SPECIES_UNIVERSE, dtype=np.int16)
     div_cost = np.zeros(N_SPECIES_UNIVERSE, dtype=np.int16)
     birth_energy = np.zeros(N_SPECIES_UNIVERSE, dtype=np.int16)
+    secondary_preference = np.zeros(N_SPECIES_UNIVERSE, dtype=np.int16)
+
+    # Shared "popular" metabolites preferred by all species.
+    popular_primary = np.sort(
+        rng.choice(high, size=2, replace=False).astype(np.int16)
+    )
+    popular_set = set(int(x) for x in popular_primary.tolist())
 
     uptake_list: list[np.ndarray] = []
     secrete_list: list[np.ndarray] = []
@@ -109,8 +118,20 @@ def _build_universe() -> _UniverseParams:
         n_secondary = int(rng.integers(1, 4))
         secondary = rng.choice(all_resources, size=n_secondary, replace=False)
 
-        uptake = np.unique(np.concatenate([primary, secondary])).astype(np.int16)
+        uptake = np.unique(
+            np.concatenate([primary, secondary, popular_primary])
+        ).astype(np.int16)
         uptake.sort()
+
+        secondary_candidates = np.asarray(
+            [int(x) for x in uptake.tolist() if int(x) not in popular_set],
+            dtype=np.int16,
+        )
+        if secondary_candidates.size == 0:
+            secondary_candidates = uptake
+        secondary_preference[s] = int(
+            rng.choice(secondary_candidates, size=1, replace=False)[0]
+        )
 
         # Secretion: small number of targets from the secrete band.
         # High-band species: mostly 0 or 1 secretion target to avoid
@@ -153,7 +174,12 @@ def _build_universe() -> _UniverseParams:
     feed_rate = np.zeros(N_RESOURCES_UNIVERSE, dtype=np.float32)
 
     # 3 high-energy resources with substantial inflow concentration.
-    high_feed = rng.choice(high, size=3, replace=False)
+    extra_high = rng.choice(
+        np.setdiff1d(high, popular_primary, assume_unique=True),
+        size=1,
+        replace=False,
+    ).astype(np.int16)
+    high_feed = np.concatenate([popular_primary, extra_high])
     feed_rate[high_feed] = rng.uniform(50.0, 110.0, size=3).astype(np.float32)
 
     # 5 mid-band resources with moderate inflow concentration.
@@ -173,6 +199,8 @@ def _build_universe() -> _UniverseParams:
         birth_energy=birth_energy,
         uptake_list=tuple(arr.copy() for arr in uptake_list),
         secrete_list=tuple(arr.copy() for arr in secrete_list),
+        popular_primary=popular_primary.copy(),
+        secondary_preference=secondary_preference.copy(),
         feed_rate=feed_rate,
     )
 
@@ -247,6 +275,8 @@ def make_ibm_config_from_species(
     for i in idx:
         used.update(int(x) for x in uni.uptake_list[i].tolist())
         used.update(int(x) for x in uni.secrete_list[i].tolist())
+        used.add(int(uni.secondary_preference[i]))
+    used.update(int(x) for x in uni.popular_primary.tolist())
 
     # Always include resources that receive non-zero external feed.
     feed_nonzero = np.nonzero(uni.feed_rate > 0.0)[0].tolist()
@@ -278,6 +308,13 @@ def make_ibm_config_from_species(
         s_mapped = sorted({int(res_map[int(x)]) for x in s_src.tolist() if res_map[int(x)] >= 0})
         uptake_compact.append(u_mapped)
         secrete_compact.append(s_mapped)
+
+    popular_compact = [
+        int(res_map[int(x)])
+        for x in uni.popular_primary.tolist()
+        if int(res_map[int(x)]) >= 0
+    ]
+    secondary_compact = [int(res_map[int(uni.secondary_preference[i])]) for i in idx]
 
     # Build a low per-resource basal level aligned with the feed pattern.
     if feed_rate_compact.size > 0 and float(feed_rate_compact.max()) > 0.0:
@@ -317,6 +354,8 @@ def make_ibm_config_from_species(
         # Per-species resource lists.
         "uptake_list": uptake_compact,
         "secrete_list": secrete_compact,
+        "popular_uptake_list": popular_compact,
+        "secondary_uptake": secondary_compact,
     }
 
     if overrides:

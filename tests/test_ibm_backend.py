@@ -5,6 +5,7 @@ import numpy as np
 from computingMicrobiome.benchmarks.episode_runner import run_reservoir_episode
 from computingMicrobiome.ibm.diffusion import diffuse_resources
 from computingMicrobiome.ibm.dilution import apply_dilution
+from computingMicrobiome.ibm.metabolism import apply_uptake
 from computingMicrobiome.ibm.params import load_params
 from computingMicrobiome.ibm.reproduction import apply_reproduction
 from computingMicrobiome.ibm.state import GridState, make_zero_state
@@ -143,6 +144,84 @@ def test_ibm_feed_inflow_increases_with_dilution() -> None:
     apply_dilution(state_high, env_high, np.random.default_rng(1))
 
     assert int(state_high.R.sum()) > int(state_low.R.sum())
+
+
+def test_ibm_popular_then_secondary_preference_order() -> None:
+    env, species = load_params(
+        {
+            "height": 1,
+            "width_grid": 2,
+            "n_species": 2,
+            "n_resources": 3,
+            "uptake_rate": [1, 1],
+            "yield_energy": [1, 1],
+            "maint_cost": [0, 0],
+            "div_threshold": [255, 255],
+            "div_cost": [0, 0],
+            "birth_energy": [0, 0],
+            "uptake_list": [[0, 1, 2], [0, 1, 2]],
+            "secrete_list": [[], []],
+            "popular_uptake_list": [0],
+            "secondary_uptake": [1, 2],
+        }
+    )
+    state = GridState(
+        occ=np.array([[0, 1]], dtype=np.int16),
+        E=np.array([[0, 0]], dtype=np.uint8),
+        R=np.zeros((3, 1, 2), dtype=np.uint8),
+    )
+
+    # Primary popular metabolite available in both cells.
+    state.R[0, 0, 0] = 1
+    state.R[0, 0, 1] = 1
+    apply_uptake(state, species, env)
+    assert int(state.R[0, 0, 0]) == 0
+    assert int(state.R[0, 0, 1]) == 0
+    assert int(state.E[0, 0]) == 1
+    assert int(state.E[0, 1]) == 1
+
+    # Popular metabolite exhausted: species switch to species-specific secondary.
+    state.E.fill(0)
+    state.R.fill(0)
+    state.R[1, 0, 0] = 1  # secondary for species 0
+    state.R[2, 0, 1] = 1  # secondary for species 1
+    apply_uptake(state, species, env)
+    assert int(state.R[1, 0, 0]) == 0
+    assert int(state.R[2, 0, 1]) == 0
+    assert int(state.E[0, 0]) == 1
+    assert int(state.E[0, 1]) == 1
+
+
+def test_ibm_preference_does_not_fallback_beyond_secondary() -> None:
+    env, species = load_params(
+        {
+            "height": 1,
+            "width_grid": 1,
+            "n_species": 1,
+            "n_resources": 3,
+            "uptake_rate": [1],
+            "yield_energy": [1],
+            "maint_cost": [0],
+            "div_threshold": [255],
+            "div_cost": [0],
+            "birth_energy": [0],
+            "uptake_list": [[0, 1, 2]],
+            "secrete_list": [[]],
+            "popular_uptake_list": [0],
+            "secondary_uptake": [1],
+        }
+    )
+    state = GridState(
+        occ=np.array([[0]], dtype=np.int16),
+        E=np.array([[0]], dtype=np.uint8),
+        R=np.zeros((3, 1, 1), dtype=np.uint8),
+    )
+
+    # Popular and secondary unavailable; another uptake metabolite exists.
+    state.R[2, 0, 0] = 1
+    apply_uptake(state, species, env)
+    assert int(state.R[2, 0, 0]) == 1
+    assert int(state.E[0, 0]) == 0
 
 
 class _DummyRNG:

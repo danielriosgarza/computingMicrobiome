@@ -43,6 +43,25 @@ def apply_uptake(state: GridState, species: SpeciesParams, env: EnvParams) -> No
         if uptake_resources.size == 0:
             continue
 
+        popular_resources = species.popular_uptake_list[s]
+        secondary_resource = int(species.secondary_uptake[s])
+        if popular_resources.size > 0:
+            # Species-level preference policy:
+            # 1) shared popular metabolites first,
+            # 2) species-specific secondary fallback if popular are unavailable.
+            pref_order: list[int] = []
+            for m in popular_resources.tolist():
+                mi = int(m)
+                if mi not in pref_order:
+                    pref_order.append(mi)
+            if secondary_resource >= 0 and secondary_resource not in pref_order:
+                pref_order.append(secondary_resource)
+            uptake_order = np.asarray(pref_order, dtype=np.int16)
+            if uptake_order.size == 0:
+                continue
+        else:
+            uptake_order = uptake_resources
+
         secrete_resources = species.secrete_list[s]
         gain = int(species.yield_energy[s])
 
@@ -50,8 +69,8 @@ def apply_uptake(state: GridState, species: SpeciesParams, env: EnvParams) -> No
             chosen = np.full(members.shape, -1, dtype=np.int16)
             waiting = members.copy()
 
-            # First available resource in uptake_list order.
-            for m in uptake_resources.tolist():
+            # First available resource in preference order.
+            for m in uptake_order.tolist():
                 can_take = waiting & (R_work[m] > 0)
                 if np.any(can_take):
                     chosen[can_take] = m
@@ -63,7 +82,7 @@ def apply_uptake(state: GridState, species: SpeciesParams, env: EnvParams) -> No
             if not np.any(consumed):
                 continue
 
-            for m in uptake_resources.tolist():
+            for m in uptake_order.tolist():
                 hit = chosen == m
                 if np.any(hit):
                     R_work[m, hit] -= 1
