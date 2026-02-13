@@ -329,7 +329,7 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
     # Per-species energy capacity: default ~3× div_cost to limit saturation.
     raw_cap = cfg.get("energy_capacity")
     if raw_cap is None:
-        energy_capacity = np.clip(1.5 * div_cost.astype(np.int32), 1, Emax).astype(
+        energy_capacity = np.clip(2 * div_cost.astype(np.int32), 1, Emax).astype(
             np.uint8
         )
     else:
