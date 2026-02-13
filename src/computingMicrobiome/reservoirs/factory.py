@@ -8,6 +8,7 @@ from .base import ReservoirBackend
 from .crm_backend import CRMReservoirBackend
 from .eca_backend import ECAReservoirBackend
 from .ibm_backend import IBMReservoirBackend
+from .ibm_pulse_backend import IBMReservoirBackendPulse
 
 
 def make_reservoir(
@@ -30,4 +31,6 @@ def make_reservoir(
         return CRMReservoirBackend(config=reservoir_config)
     if kind in ("ibm", "ibm_crm"):
         return IBMReservoirBackend(config=reservoir_config)
-    raise ValueError("reservoir_kind must be one of {'eca', 'crm', 'ibm'}")
+    if kind == "ibm_pulse":
+        return IBMReservoirBackendPulse(config=reservoir_config)
+    raise ValueError("reservoir_kind must be one of {'eca', 'crm', 'ibm', 'ibm_pulse'}")
