@@ -6,8 +6,12 @@ from typing import Any, Mapping
 
 import numpy as np
 
+from ..ibm.diffusion import diffuse_resources
+from ..ibm.dilution import apply_dilution
 from ..ibm.encoding import encode_state
+from ..ibm.metabolism import apply_maintenance, apply_uptake
 from ..ibm.params import EnvParams, SpeciesParams, load_params
+from ..ibm.reproduction import apply_reproduction
 from ..ibm.state import GridState, make_zero_state
 from ..ibm.stepper import tick
 
@@ -53,6 +57,67 @@ class IBMReservoirBackend:
         if self._inject_mode not in ("add", "replace"):
             raise ValueError("inject_mode must be 'add' or 'replace'")
 
+        self._left_source_enabled = bool(cfg.get("left_source_enabled", False))
+        self._left_source_colonize_empty = bool(
+            cfg.get("left_source_colonize_empty", True)
+        )
+        self._left_source_margin = int(cfg.get("left_source_outcompete_margin", 0))
+        if self._left_source_margin < 0:
+            raise ValueError("left_source_outcompete_margin must be >= 0")
+        if self._left_source_enabled and self.width_grid < 2:
+            raise ValueError("left_source_enabled requires width_grid >= 2")
+
+        raw_source = cfg.get("left_source_species")
+        if raw_source is None:
+            self._left_source_species_cfg = None
+        else:
+            source = np.asarray(raw_source, dtype=np.int16).reshape(-1)
+            if source.size != self.height:
+                raise ValueError("left_source_species must have length height")
+            if np.any(source < -1) or np.any(source >= self.n_species):
+                raise ValueError(
+                    "left_source_species entries must be -1 or in [0, n_species)"
+                )
+            self._left_source_species_cfg = source.copy()
+
+        raw_comp = cfg.get("left_source_competition")
+        if raw_comp is None:
+            # Default outcompetition score from species traits.
+            base = (
+                self.species.yield_energy.astype(np.int32)
+                + self.species.birth_energy.astype(np.int32)
+                + self.species.uptake_rate.astype(np.int32)
+                - self.species.maint_cost.astype(np.int32)
+            )
+            comp = np.maximum(base, 0)
+        elif np.isscalar(raw_comp):
+            comp = np.full(self.n_species, int(raw_comp), dtype=np.int32)
+        else:
+            comp = np.asarray(raw_comp, dtype=np.int32).reshape(-1)
+            if comp.size != self.n_species:
+                raise ValueError("left_source_competition must be scalar or length n_species")
+        if np.any(comp < 0):
+            raise ValueError("left_source_competition must be >= 0")
+        self._left_source_competition = comp.astype(np.int32, copy=True)
+
+        raw_settle = cfg.get("left_source_settle_energy")
+        if raw_settle is None:
+            settle = self.species.birth_energy.astype(np.int32)
+        elif np.isscalar(raw_settle):
+            settle = np.full(self.n_species, int(raw_settle), dtype=np.int32)
+        else:
+            settle = np.asarray(raw_settle, dtype=np.int32).reshape(-1)
+            if settle.size != self.n_species:
+                raise ValueError(
+                    "left_source_settle_energy must be scalar or length n_species"
+                )
+        if np.any(settle < 0):
+            raise ValueError("left_source_settle_energy must be >= 0")
+        self._left_source_settle_energy = np.clip(
+            settle, 0, int(self.env.Emax)
+        ).astype(np.int32, copy=True)
+        self._left_source_species = np.full(self.height, -1, dtype=np.int16)
+
         if self._state_width_mode == "cells":
             self.width = self._cells
         else:
@@ -65,6 +130,68 @@ class IBMReservoirBackend:
         )
         self._trace = np.zeros((self._trace_depth, self._trace_channels), dtype=np.float32)
 
+    def _init_left_source_from_state(self) -> None:
+        if not self._left_source_enabled:
+            return
+        if self._left_source_species_cfg is not None:
+            source = self._left_source_species_cfg.copy()
+        else:
+            source = self._state.occ[:, 0].astype(np.int16, copy=True)
+            bad = (source < -1) | (source >= self.n_species)
+            source[bad] = -1
+        self._left_source_species = source
+        self._enforce_left_source_column()
+
+    def _enforce_left_source_column(self) -> None:
+        if not self._left_source_enabled:
+            return
+        self._state.occ[:, 0] = self._left_source_species
+        self._state.E[:, 0] = 0
+        self._state.R[:, :, 0] = 0
+
+    def _exclude_left_source_from_dynamics(self) -> None:
+        if not self._left_source_enabled:
+            return
+        self._state.occ[:, 0] = -1
+        self._state.E[:, 0] = 0
+        self._state.R[:, :, 0] = 0
+
+    def _apply_left_source_migration(self) -> None:
+        if not self._left_source_enabled or self.width_grid < 2:
+            return
+
+        tgt_col = 1
+        occ = self._state.occ
+        E_work = self._state.E.astype(np.int32, copy=True)
+        source = self._left_source_species
+
+        if self._left_source_colonize_empty:
+            empty = occ[:, tgt_col] < 0
+            can_seed = (source >= 0) & empty
+            if np.any(can_seed):
+                rows = np.where(can_seed)[0]
+                src_species = source[rows]
+                occ[rows, tgt_col] = src_species
+                E_work[rows, tgt_col] = self._left_source_settle_energy[src_species]
+
+        tgt = occ[:, tgt_col]
+        can_compete = (source >= 0) & (tgt >= 0) & (source != tgt)
+        if np.any(can_compete):
+            rows = np.where(can_compete)[0]
+            src_species = source[rows]
+            tgt_species = tgt[rows]
+            src_score = self._left_source_competition[src_species]
+            tgt_score = self._left_source_competition[tgt_species]
+            wins = src_score >= (tgt_score + int(self._left_source_margin))
+            if np.any(wins):
+                rows_win = rows[wins]
+                src_win = source[rows_win]
+                occ[rows_win, tgt_col] = src_win
+                E_work[rows_win, tgt_col] = self._left_source_settle_energy[src_win]
+
+        E_work[occ < 0] = 0
+        self._state.E = np.clip(E_work, 0, self.env.Emax).astype(np.uint8)
+
     def reset(self, rng: np.random.Generator, x0_mode: str = "zeros") -> None:
         if self._trace_depth > 0:
             self._trace.fill(0.0)
@@ -76,6 +203,7 @@ class IBMReservoirBackend:
                     width_grid=self.width_grid,
                     n_resources=self.n_resources,
                 )
+                self._init_left_source_from_state()
                 return
 
             rr, cc = np.indices((self.height, self.width_grid))
@@ -116,6 +244,7 @@ class IBMReservoirBackend:
                     dtype=np.uint8,
                 )
             self._state = GridState(occ=occ, E=E, R=R)
+            self._init_left_source_from_state()
             return
         if x0_mode == "random":
             occ = np.full((self.height, self.width_grid), -1, dtype=np.int16)
@@ -145,6 +274,7 @@ class IBMReservoirBackend:
                 dtype=np.uint16,
             ).astype(np.uint8)
             self._state = GridState(occ=occ, E=E, R=R)
+            self._init_left_source_from_state()
             return
         raise ValueError("x0_mode must be 'zeros' or 'random'")
 
@@ -194,7 +324,28 @@ class IBMReservoirBackend:
             if self._trace_depth > 1:
                 self._trace[1:] = self._trace[:-1] * self._trace_decay
             self._trace[0].fill(0.0)
-        tick(self._state, self.env, self.species, rng)
+
+        if not self._left_source_enabled:
+            tick(self._state, self.env, self.species, rng)
+            return
+
+        self._exclude_left_source_from_dynamics()
+
+        # Explicit phase-by-phase update so we can keep the source column
+        # outside the dynamics and only allow directed migration into column 1.
+        diffuse_resources(self._state, self.env)
+        apply_dilution(self._state, self.env, rng)
+        apply_maintenance(self._state, self.species, self.env)
+        apply_uptake(self._state, self.species, self.env)
+
+        # Block reproduction targets into the source column.
+        self._state.occ[:, 0] = -2
+        apply_reproduction(self._state, self.species, self.env, rng)
+        self._state.occ[:, 0] = -1
+        self._state.E[self._state.occ < 0] = 0
+
+        self._apply_left_source_migration()
+        self._enforce_left_source_column()
 
     def get_state(self) -> np.ndarray:
         if self._state_width_mode == "raw":

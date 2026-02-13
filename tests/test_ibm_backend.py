@@ -224,6 +224,82 @@ def test_ibm_preference_does_not_fallback_beyond_secondary() -> None:
     assert int(state.E[0, 0]) == 0
 
 
+def test_ibm_left_source_column_migration_outcompetes_adjacent() -> None:
+    backend = IBMReservoirBackend(
+        config={
+            "height": 2,
+            "width_grid": 3,
+            "n_species": 2,
+            "n_resources": 1,
+            "diff_numer": 0,
+            "dilution_p": 0.0,
+            "feed_rate": 0.0,
+            "maint_cost": [0, 0],
+            "uptake_rate": [0, 0],
+            "yield_energy": [0, 0],
+            "div_threshold": [255, 255],
+            "div_cost": [0, 0],
+            "birth_energy": [5, 5],
+            "left_source_enabled": True,
+            "left_source_species": [0, 1],
+            "left_source_competition": [10, 4],
+            "left_source_outcompete_margin": 0,
+            "left_source_colonize_empty": True,
+        }
+    )
+    rng = np.random.default_rng(0)
+    backend.reset(rng, x0_mode="zeros")
+
+    np.testing.assert_array_equal(backend._state.occ[:, 0], np.array([0, 1], dtype=np.int16))
+    assert int(backend._state.E[:, 0].sum()) == 0
+    assert int(backend._state.R[:, :, 0].sum()) == 0
+
+    # Row 0 should be replaced (source species 0 outcompetes target species 1).
+    # Row 1 should stay unchanged (source species 1 does not outcompete species 0).
+    backend._state.occ[:, 1] = np.array([1, 0], dtype=np.int16)
+    backend._state.E[:, 1] = np.array([6, 6], dtype=np.uint8)
+
+    backend.step(rng)
+
+    assert int(backend._state.occ[0, 1]) == 0
+    assert int(backend._state.E[0, 1]) == 5
+    assert int(backend._state.occ[1, 1]) == 0
+    np.testing.assert_array_equal(backend._state.occ[:, 0], np.array([0, 1], dtype=np.int16))
+    assert int(backend._state.R[:, :, 0].sum()) == 0
+
+
+def test_ibm_left_source_column_can_skip_empty_colonization() -> None:
+    backend = IBMReservoirBackend(
+        config={
+            "height": 2,
+            "width_grid": 3,
+            "n_species": 2,
+            "n_resources": 1,
+            "diff_numer": 0,
+            "dilution_p": 0.0,
+            "feed_rate": 0.0,
+            "maint_cost": [0, 0],
+            "uptake_rate": [0, 0],
+            "yield_energy": [0, 0],
+            "div_threshold": [255, 255],
+            "div_cost": [0, 0],
+            "birth_energy": [5, 5],
+            "left_source_enabled": True,
+            "left_source_species": [0, 1],
+            "left_source_competition": [10, 10],
+            "left_source_colonize_empty": False,
+        }
+    )
+    rng = np.random.default_rng(1)
+    backend.reset(rng, x0_mode="zeros")
+
+    backend._state.occ[:, 1] = -1
+    backend._state.E[:, 1] = 0
+    backend.step(rng)
+
+    np.testing.assert_array_equal(backend._state.occ[:, 1], np.array([-1, -1], dtype=np.int16))
+
+
 class _DummyRNG:
     def __init__(self, outputs: list[np.ndarray]):
         self._outputs = outputs
