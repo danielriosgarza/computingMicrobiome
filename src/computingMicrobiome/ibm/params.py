@@ -22,6 +22,8 @@ class SpeciesParams:
     div_threshold: np.ndarray
     div_cost: np.ndarray
     birth_energy: np.ndarray
+    # Per-species max stored energy (~5× div_cost); limits saturation.
+    energy_capacity: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -292,6 +294,8 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
                 div_cost[s] = int(entry["div_cost"])
             if "birth_energy" in entry:
                 birth_energy[s] = int(entry["birth_energy"])
+            if "energy_capacity" in entry:
+                energy_capacity[s] = int(np.clip(entry["energy_capacity"], 1, Emax))
             if "uptake_list" in entry:
                 uptake_list[s] = _coerce_resource_list(
                     entry["uptake_list"],
@@ -321,6 +325,21 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
     div_threshold = np.clip(div_threshold, 0, Emax).astype(np.uint8)
     div_cost = np.clip(div_cost, 0, Emax).astype(np.uint8)
     birth_energy = np.clip(birth_energy, 0, Emax).astype(np.uint8)
+
+    # Per-species energy capacity: default ~5× div_cost to limit saturation.
+    raw_cap = cfg.get("energy_capacity")
+    if raw_cap is None:
+        energy_capacity = np.clip(5 * div_cost.astype(np.int32), 1, Emax).astype(
+            np.uint8
+        )
+    else:
+        energy_capacity = _read_species_scalar(
+            cfg, "energy_capacity", n_species, default=5 * int(div_cost[0])
+        )
+        energy_capacity = np.clip(energy_capacity.astype(np.int32), 1, Emax).astype(
+            np.uint8
+        )
+
     if np.any(secondary_uptake < -1) or np.any(secondary_uptake >= n_resources):
         raise ValueError("secondary_uptake values must be -1 or in [0, n_resources)")
 
@@ -374,5 +393,6 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
         div_threshold=div_threshold,
         div_cost=div_cost,
         birth_energy=birth_energy,
+        energy_capacity=energy_capacity,
     )
     return env, species

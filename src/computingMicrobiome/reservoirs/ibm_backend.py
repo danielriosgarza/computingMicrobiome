@@ -190,7 +190,8 @@ class IBMReservoirBackend:
                 E_work[rows_win, tgt_col] = self._left_source_settle_energy[src_win]
 
         E_work[occ < 0] = 0
-        self._state.E = np.clip(E_work, 0, self.env.Emax).astype(np.uint8)
+        cap = np.where(occ >= 0, self.species.energy_capacity[occ], 0)
+        self._state.E = np.minimum(np.maximum(E_work, 0), cap).astype(np.uint8)
 
     def reset(self, rng: np.random.Generator, x0_mode: str = "zeros") -> None:
         if self._trace_depth > 0:

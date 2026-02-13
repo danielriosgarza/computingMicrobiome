@@ -240,6 +240,7 @@ def test_ibm_left_source_column_migration_outcompetes_adjacent() -> None:
             "div_threshold": [255, 255],
             "div_cost": [0, 0],
             "birth_energy": [5, 5],
+            "energy_capacity": [10, 10],  # so settle energy 5 is not clipped (5*0→1)
             "left_source_enabled": True,
             "left_source_species": [0, 1],
             "left_source_competition": [10, 4],
@@ -324,6 +325,8 @@ def test_ibm_birth_conflicts() -> None:
             "width_grid": 3,
             "n_species": 2,
             "n_resources": 1,
+            "Emax": 255,
+            "energy_capacity": [50, 50],  # so parent energy 50 - div_cost 5 = 45 is not clipped
             "div_threshold": [10, 10],
             "div_cost": [5, 5],
             "birth_energy": [7, 7],
@@ -363,6 +366,7 @@ def test_ibm_invasion_replaces_occupied_neighbor() -> None:
             "div_threshold": [10, 255],  # species 1 cannot reproduce
             "div_cost": [0, 0],
             "birth_energy": [7, 7],
+            "energy_capacity": [10, 10],  # so newborn energy 7 is not clipped
         }
     )
     state = GridState(

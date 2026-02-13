@@ -21,7 +21,8 @@ def apply_maintenance(state: GridState, species: SpeciesParams, env: EnvParams) 
         occ[dead] = -1
 
     E_next[occ < 0] = 0
-    state.E = np.clip(E_next, 0, env.Emax).astype(np.uint8)
+    cap = np.where(occ >= 0, species.energy_capacity[occ], 0)
+    state.E = np.minimum(np.maximum(E_next, 0), cap).astype(np.uint8)
 
 
 def apply_uptake(state: GridState, species: SpeciesParams, env: EnvParams) -> None:
@@ -94,5 +95,6 @@ def apply_uptake(state: GridState, species: SpeciesParams, env: EnvParams) -> No
                 R_work[q, consumed] += 1
 
     E_work[occ < 0] = 0
-    state.E = np.clip(E_work, 0, env.Emax).astype(np.uint8)
+    cap = np.where(occ >= 0, species.energy_capacity[occ], 0)
+    state.E = np.minimum(np.maximum(E_work, 0), cap).astype(np.uint8)
     state.R = np.clip(R_work, 0, env.Rmax).astype(np.uint8)

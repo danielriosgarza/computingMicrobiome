@@ -70,7 +70,8 @@ def apply_reproduction(
         score_all.append(score)
 
     if not tgt_all:
-        state.E = np.clip(E_work, 0, env.Emax).astype(np.uint8)
+        cap = np.where(occ >= 0, species.energy_capacity[occ], 0)
+        state.E = np.minimum(np.maximum(E_work, 0), cap).astype(np.uint8)
         return
 
     tgt = np.concatenate(tgt_all)
@@ -101,4 +102,6 @@ def apply_reproduction(
     E_flat[tgt] = species.birth_energy[sp].astype(np.int32)
     E_flat[occ_flat < 0] = 0
 
-    state.E = np.clip(E_flat.reshape(H, W), 0, env.Emax).astype(np.uint8)
+    cap_flat = np.where(occ_flat >= 0, species.energy_capacity[occ_flat], 0)
+    E_flat = np.minimum(np.maximum(E_flat, 0), cap_flat.astype(np.int32))
+    state.E = E_flat.reshape(H, W).astype(np.uint8)

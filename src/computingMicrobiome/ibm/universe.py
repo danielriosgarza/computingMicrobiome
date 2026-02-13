@@ -263,6 +263,7 @@ def make_ibm_config_from_species(
     Rmax, Emax, diff_numer, diff_denom, transport_shift, dilution_p,
     inject_scale, basal_*:
         Environment-level parameters passed directly to `load_params`.
+        Per-species energy capacity (default 5× div_cost) limits saturation.
     overrides:
         Optional extra keys/values to merge into the config; this is useful to
         attach reservoir-backend-specific options such as `state_width_mode`
