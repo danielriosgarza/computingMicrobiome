@@ -104,6 +104,47 @@ def test_ibm_dilution_removes() -> None:
     assert int(state.R.sum()) == 0
 
 
+def test_ibm_feed_requires_dilution() -> None:
+    env, _ = load_params(_cfg(dilution_p=0.0, feed_rate=[200.0, 150.0]))
+    state = make_zero_state(
+        height=env.height,
+        width_grid=env.width_grid,
+        n_resources=env.n_resources,
+    )
+    apply_dilution(state, env, np.random.default_rng(0))
+    assert int(state.R.sum()) == 0
+
+
+def test_ibm_feed_inflow_increases_with_dilution() -> None:
+    cfg_base = {
+        "height": 64,
+        "width_grid": 64,
+        "n_species": 1,
+        "n_resources": 1,
+        "feed_rate": [120.0],
+        "diff_numer": 0,
+    }
+    env_low, _ = load_params(dict(cfg_base, dilution_p=0.05))
+    env_high, _ = load_params(dict(cfg_base, dilution_p=0.40))
+
+    state_low = make_zero_state(
+        height=env_low.height,
+        width_grid=env_low.width_grid,
+        n_resources=env_low.n_resources,
+    )
+    state_high = make_zero_state(
+        height=env_high.height,
+        width_grid=env_high.width_grid,
+        n_resources=env_high.n_resources,
+    )
+
+    # One-step from zero isolates feed inflow magnitude.
+    apply_dilution(state_low, env_low, np.random.default_rng(1))
+    apply_dilution(state_high, env_high, np.random.default_rng(1))
+
+    assert int(state_high.R.sum()) > int(state_low.R.sum())
+
+
 class _DummyRNG:
     def __init__(self, outputs: list[np.ndarray]):
         self._outputs = outputs

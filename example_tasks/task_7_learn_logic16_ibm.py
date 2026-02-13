@@ -43,7 +43,7 @@ BOUNDARY = "periodic"
 # Target recurrence used when lattice width allows it.
 RECURRENCE_TARGET = 8
 ITR = 8
-D_PERIOD = 100
+D_PERIOD = 25
 REPEATS = 1
 FEATURE_MODE = "cue_tick"
 OUTPUT_WINDOW = 2
@@ -69,8 +69,8 @@ TRACE_DEPTH = LOGIC16_STREAM_LEN * (ITR + 1) + 8
 
 IBM_CFG = make_ibm_config_from_species(
     species_indices=[0, 1, 2, 4, 5, 6, 8, 9, 10, 11, 12],
-    height=80,
-    width_grid=80,
+    height=8,
+    width_grid=8,
     overrides={
         "state_width_mode": "raw",
         "input_trace_depth": TRACE_DEPTH,

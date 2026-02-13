@@ -146,22 +146,23 @@ def _build_universe() -> _UniverseParams:
         div_cost[s] = int(rng.integers(8, 18))        # energy cost of division
         birth_energy[s] = int(rng.integers(10, 20))   # newborn energy
 
-    # External feed pattern: modest feed on a few high-band resources, weaker on
-    # some mid-band resources, almost none elsewhere. Combined with dilution,
-    # this aims to keep total resource levels roughly bounded.
+    # External feed pattern (chemostat inflow concentrations): higher
+    # concentrations for a few high-band resources, weaker for some mid-band
+    # resources, and very low for low-band resources. In `apply_dilution`, the
+    # actual inflow amount per step scales with dilution.
     feed_rate = np.zeros(N_RESOURCES_UNIVERSE, dtype=np.float32)
 
-    # 3 high-energy resources with modest feed.
+    # 3 high-energy resources with substantial inflow concentration.
     high_feed = rng.choice(high, size=3, replace=False)
-    feed_rate[high_feed] = rng.uniform(0.5, 1.5, size=3).astype(np.float32)
+    feed_rate[high_feed] = rng.uniform(50.0, 110.0, size=3).astype(np.float32)
 
-    # 5 mid-band resources with weak feed.
+    # 5 mid-band resources with moderate inflow concentration.
     mid_feed = rng.choice(mid, size=5, replace=False)
-    feed_rate[mid_feed] = rng.uniform(0.05, 0.3, size=5).astype(np.float32)
+    feed_rate[mid_feed] = rng.uniform(8.0, 25.0, size=5).astype(np.float32)
 
-    # Tiny baseline feed on a few low-band resources.
+    # Tiny baseline inflow on a few low-band resources.
     low_feed = rng.choice(low, size=5, replace=False)
-    feed_rate[low_feed] = rng.uniform(0.0, 0.05, size=5).astype(np.float32)
+    feed_rate[low_feed] = rng.uniform(0.0, 5.0, size=5).astype(np.float32)
 
     return _UniverseParams(
         maint_cost=maint_cost,
