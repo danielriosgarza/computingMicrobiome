@@ -63,12 +63,14 @@ def _build_universe() -> _UniverseParams:
         * low:   60–99
     - Species partitioned into groups:
         * high-eaters (0–19): primary uptake from high, always secrete 1–3
-          resources chosen randomly from mid and low bands.
-        * mid-eaters (20–39): primary uptake from mid, secrete into low.
+          resources chosen randomly from mid and low bands; highest div_cost.
+        * mid-eaters (20–39): primary uptake from mid, secrete into low;
+          medium div_cost.
         * low-eaters (40–49): primary uptake from low, do not secrete
-          (pure consumers of low-band).
+          (pure consumers of low-band); lowest div_cost.
     - Each species uptakes multiple resources (primary + secondary);
       high- and mid-eaters secrete into lower bands, low-eaters do not.
+    - Division cost is structured by group: high-eaters > mid-eaters > low-eaters.
     - External feed is concentrated on a few high-band resources and lightly
       on some mid-band resources; low-band resources appear mostly via
       secretion.
@@ -165,12 +167,18 @@ def _build_universe() -> _UniverseParams:
         secrete_list.append(secrete)
 
         # Scalar parameters: chosen from reasonable integer ranges and later
-        # clipped inside `load_params`.
+        # clipped inside `load_params`. Division cost is structured by group:
+        # high-eaters pay more to divide than low-eaters.
         maint_cost[s] = int(rng.integers(1, 4))       # 1–3
         uptake_rate[s] = int(rng.integers(1, 4))      # 1–3 uptake attempts / tick
         yield_energy[s] = int(rng.integers(3, 7))     # 3–6 energy per successful uptake
         div_threshold[s] = int(rng.integers(18, 34))  # energy needed to divide
-        div_cost[s] = int(rng.integers(8, 18))        # energy cost of division
+        if s < 20:
+            div_cost[s] = int(rng.integers(14, 23))   # high-eaters: 14–22
+        elif s < 40:
+            div_cost[s] = int(rng.integers(10, 17))  # mid-eaters: 10–16
+        else:
+            div_cost[s] = int(rng.integers(6, 13))    # low-eaters: 6–12
         birth_energy[s] = int(rng.integers(10, 20))   # newborn energy
 
     # External feed pattern (chemostat inflow concentrations): higher
