@@ -32,6 +32,11 @@ from .state import GridState
 N_SPECIES_UNIVERSE = 50
 N_RESOURCES_UNIVERSE = 100
 
+# Curated 6-species cross-feeding composition: 2 high + 2 mid + 2 low.
+# High-eaters (0, 1) secrete into mid/low; mid-eaters (20, 21) consume mid, secrete into low;
+# low-eaters (40, 41) consume low. Use with make_ibm_config_from_species(species_indices=CROSS_FEED_6_SPECIES).
+CROSS_FEED_6_SPECIES = [0, 1, 20, 21, 40, 41]
+
 
 @dataclass(frozen=True)
 class _UniverseParams:
