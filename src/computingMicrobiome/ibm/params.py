@@ -24,6 +24,8 @@ class SpeciesParams:
     birth_energy: np.ndarray
     # Per-species max stored energy (~5× div_cost); limits saturation.
     energy_capacity: np.ndarray
+    # Per-species toxin tolerance; cell dies if R[toxin] > this (when toxin_resource_index set).
+    toxin_tolerance: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,8 @@ class EnvParams:
     # resource fields. Older configs that only specify a scalar remain valid.
     basal_resource_vec: np.ndarray | None
     basal_pattern: str
+    # Toxin: compact resource index for toxic compound; None = no toxin death.
+    toxin_resource_index: int | None
 
 
 def _read_species_scalar(
@@ -227,6 +231,16 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
     if basal_pattern not in {"checkerboard", "stripes"}:
         raise ValueError("basal_pattern must be one of {'checkerboard', 'stripes'}")
 
+    raw_toxin_idx = cfg.get("toxin_resource_index")
+    if raw_toxin_idx is None:
+        toxin_resource_index = None
+    else:
+        toxin_resource_index = int(raw_toxin_idx)
+        if toxin_resource_index < 0 or toxin_resource_index >= n_resources:
+            raise ValueError(
+                "toxin_resource_index must be in [0, n_resources)"
+            )
+
     maint_cost = _read_species_scalar(cfg, "maint_cost", n_species, default=1)
     uptake_rate = _read_species_scalar(cfg, "uptake_rate", n_species, default=1)
     yield_energy = _read_species_scalar(cfg, "yield_energy", n_species, default=4)
@@ -296,6 +310,8 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
                 birth_energy[s] = int(entry["birth_energy"])
             if "energy_capacity" in entry:
                 energy_capacity[s] = int(np.clip(entry["energy_capacity"], 1, Emax))
+            if "toxin_tolerance" in entry:
+                toxin_tolerance[s] = int(np.clip(entry["toxin_tolerance"], 0, 255))
             if "uptake_list" in entry:
                 uptake_list[s] = _coerce_resource_list(
                     entry["uptake_list"],
@@ -340,6 +356,18 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
             np.uint8
         )
 
+    # Per-species toxin tolerance; default 255 (no death) when toxin not used.
+    raw_tox = cfg.get("toxin_tolerance")
+    if raw_tox is None:
+        toxin_tolerance = np.full(n_species, 255, dtype=np.uint8)
+    else:
+        toxin_tolerance = _read_species_scalar(
+            cfg, "toxin_tolerance", n_species, default=255
+        )
+        toxin_tolerance = np.clip(toxin_tolerance.astype(np.int32), 0, 255).astype(
+            np.uint8
+        )
+
     if np.any(secondary_uptake < -1) or np.any(secondary_uptake >= n_resources):
         raise ValueError("secondary_uptake values must be -1 or in [0, n_resources)")
 
@@ -380,6 +408,7 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
         basal_resource=int(np.clip(basal_resource, 0, Rmax)),
         basal_resource_vec=basal_resource_vec,
         basal_pattern=basal_pattern,
+        toxin_resource_index=toxin_resource_index,
     )
 
     species = SpeciesParams(
@@ -394,5 +423,6 @@ def load_params(config: Mapping[str, Any] | None) -> tuple[EnvParams, SpeciesPar
         div_cost=div_cost,
         birth_energy=birth_energy,
         energy_capacity=energy_capacity,
+        toxin_tolerance=toxin_tolerance,
     )
     return env, species

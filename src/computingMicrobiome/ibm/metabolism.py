@@ -9,7 +9,7 @@ from .state import GridState
 
 
 def apply_maintenance(state: GridState, species: SpeciesParams, env: EnvParams) -> None:
-    """Subtract maintenance cost and remove starved individuals."""
+    """Subtract maintenance cost, remove starved individuals, and apply toxin death."""
     occ = state.occ
     occupied = occ >= 0
     E_next = state.E.astype(np.int32, copy=True)
@@ -19,6 +19,16 @@ def apply_maintenance(state: GridState, species: SpeciesParams, env: EnvParams) 
         E_next = np.maximum(E_next - costs, 0)
         dead = occupied & (E_next == 0)
         occ[dead] = -1
+
+    # Toxin death: if toxin concentration at cell > species tolerance, cell dies.
+    if env.toxin_resource_index is not None and np.any(occupied):
+        toxin_at_cell = state.R[env.toxin_resource_index]
+        over_tolerance = np.zeros_like(occ, dtype=bool)
+        over_tolerance[occupied] = (
+            toxin_at_cell[occupied].astype(np.int32)
+            > species.toxin_tolerance[occ[occupied]].astype(np.int32)
+        )
+        occ[over_tolerance] = -1
 
     E_next[occ < 0] = 0
     cap = np.where(occ >= 0, species.energy_capacity[occ], 0)

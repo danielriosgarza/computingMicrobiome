@@ -30,7 +30,12 @@ from .state import GridState
 
 # Size of the global IBM universe.
 N_SPECIES_UNIVERSE = 50
-N_RESOURCES_UNIVERSE = 100
+N_RESOURCES_UNIVERSE = 101  # resources 0–99 + toxin at index 100
+
+# Toxic compound: resource index 100. Last 3 species of each band secrete it.
+# Cells die if toxin concentration at site > species toxin_tolerance. Absent from default media.
+TOXIN_RESOURCE_INDEX = 100
+TOXIN_SECRETOR_INDICES = (17, 18, 19, 37, 38, 39, 47, 48, 49)  # last 3 per band
 
 # Curated 6-species cross-feeding composition: 2 high + 2 mid + 2 low.
 # High-eaters (0, 1) secrete into mid/low; mid-eaters (20, 21) consume mid, secrete into low;
@@ -53,6 +58,7 @@ class _UniverseParams:
     popular_primary: np.ndarray
     secondary_preference: np.ndarray
     feed_rate: np.ndarray
+    toxin_tolerance: np.ndarray  # per-species; cell dies if R[toxin] > this
 
 
 _UNIVERSE: _UniverseParams | None = None
@@ -79,11 +85,14 @@ def _build_universe() -> _UniverseParams:
     - External feed is concentrated on a few high-band resources and lightly
       on some mid-band resources; low-band resources appear mostly via
       secretion.
+    - Toxic compound (resource 100): last 3 species of each band secrete it.
+      Per-species toxin_tolerance: cell dies if toxin at site > tolerance.
+      Toxin is absent from default media (feed_rate[100]=0).
     """
 
     rng = np.random.default_rng(12345)
 
-    # Resource energy bands.
+    # Resource energy bands; resource 100 is toxin (not a nutrient).
     high = np.arange(0, 10, dtype=np.int16)
     mid = np.arange(10, 60, dtype=np.int16)
     low = np.arange(60, 100, dtype=np.int16)
@@ -121,8 +130,8 @@ def _build_universe() -> _UniverseParams:
         n_primary = int(rng.integers(2, 4))
         primary = rng.choice(home_band, size=n_primary, replace=False)
 
-        # Secondary uptake: 1–3 resources from the full resource set.
-        all_resources = np.arange(N_RESOURCES_UNIVERSE, dtype=np.int16)
+        # Secondary uptake: 1–3 resources from nutrients only (exclude toxin index).
+        all_resources = np.arange(100, dtype=np.int16)
         n_secondary = int(rng.integers(1, 4))
         secondary = rng.choice(all_resources, size=n_secondary, replace=False)
 
@@ -168,6 +177,11 @@ def _build_universe() -> _UniverseParams:
             secrete = np.unique(secrete.astype(np.int16))
             secrete.sort()
 
+        # Last 3 species of each band also secrete the toxic compound (index 100).
+        if s in TOXIN_SECRETOR_INDICES:
+            secrete = np.concatenate([secrete, np.array([TOXIN_RESOURCE_INDEX], dtype=np.int16)])
+            secrete = np.unique(secrete)
+
         uptake_list.append(uptake)
         secrete_list.append(secrete)
 
@@ -186,11 +200,20 @@ def _build_universe() -> _UniverseParams:
             div_cost[s] = int(rng.integers(6, 13))    # low-eaters: 6–12
         birth_energy[s] = int(rng.integers(10, 20))   # newborn energy
 
+    # Per-species toxin tolerance: cell dies if toxin concentration at site > this.
+    # Secretors are more tolerant; others have a sensitivity range.
+    toxin_tolerance = np.zeros(N_SPECIES_UNIVERSE, dtype=np.int16)
+    for s in range(N_SPECIES_UNIVERSE):
+        if s in TOXIN_SECRETOR_INDICES:
+            toxin_tolerance[s] = int(rng.integers(25, 61))   # 25–60, resistant
+        else:
+            toxin_tolerance[s] = int(rng.integers(0, 31))    # 0–30, variable sensitivity
+
     # External feed pattern (chemostat inflow concentrations): higher
     # concentrations for a few high-band resources, weaker for some mid-band
     # resources, and very low for low-band resources. In `apply_dilution`, the
     # actual inflow amount per step scales with dilution.
-    feed_rate = np.zeros(N_RESOURCES_UNIVERSE, dtype=np.float32)
+    feed_rate = np.zeros(N_RESOURCES_UNIVERSE, dtype=np.float32)  # toxin 100 absent (0)
 
     # 3 high-energy resources with substantial inflow concentration.
     extra_high = rng.choice(
@@ -221,6 +244,7 @@ def _build_universe() -> _UniverseParams:
         popular_primary=popular_primary.copy(),
         secondary_preference=secondary_preference.copy(),
         feed_rate=feed_rate,
+        toxin_tolerance=toxin_tolerance,
     )
 
 
@@ -302,6 +326,9 @@ def make_ibm_config_from_species(
     feed_nonzero = np.nonzero(uni.feed_rate > 0.0)[0].tolist()
     used.update(int(x) for x in feed_nonzero)
 
+    # Always include toxin so death-by-toxin and media toxin can be applied.
+    used.add(TOXIN_RESOURCE_INDEX)
+
     if not used:
         # Fallback: in the unlikely case nothing was marked as used, keep at
         # least one resource so the system is well-defined.
@@ -309,6 +336,7 @@ def make_ibm_config_from_species(
 
     res_indices = sorted(used)
     n_resources = len(res_indices)
+    toxin_compact_idx = res_indices.index(TOXIN_RESOURCE_INDEX)
 
     # Mapping from original resource indices [0, N_RESOURCES_UNIVERSE) to
     # compacted indices [0, n_resources).
@@ -376,6 +404,8 @@ def make_ibm_config_from_species(
         "secrete_list": secrete_compact,
         "popular_uptake_list": popular_compact,
         "secondary_uptake": secondary_compact,
+        "toxin_resource_index": toxin_compact_idx,
+        "toxin_tolerance": uni.toxin_tolerance[idx].tolist(),
     }
 
     if overrides:
