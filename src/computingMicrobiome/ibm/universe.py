@@ -62,12 +62,13 @@ def _build_universe() -> _UniverseParams:
         * mid:   10–59
         * low:   60–99
     - Species partitioned into groups:
-        * high-eaters (0–19): primary uptake from high, secrete into mid.
+        * high-eaters (0–19): primary uptake from high, always secrete 1–3
+          resources chosen randomly from mid and low bands.
         * mid-eaters (20–39): primary uptake from mid, secrete into low.
-        * low-eaters (40–49): primary uptake from low, secrete into low
-          (decomposers / recyclers).
-    - Each species uptakes multiple resources (primary + secondary) and
-      secretes a small set of lower-energy resources.
+        * low-eaters (40–49): primary uptake from low, do not secrete
+          (pure consumers of low-band).
+    - Each species uptakes multiple resources (primary + secondary);
+      high- and mid-eaters secrete into lower bands, low-eaters do not.
     - External feed is concentrated on a few high-band resources and lightly
       on some mid-band resources; low-band resources appear mostly via
       secretion.
@@ -133,16 +134,19 @@ def _build_universe() -> _UniverseParams:
             rng.choice(secondary_candidates, size=1, replace=False)[0]
         )
 
-        # Secretion: small number of targets from the secrete band.
-        # High-band species: mostly 0 or 1 secretion target to avoid
-        # excessive mass amplification; others: 1–2 targets.
+        # Secretion: high-eaters forced to secrete; low-eaters do not secrete.
+        # High-band species: always 1–3 secretion targets, randomly from mid and low.
+        # Mid-band species: 1–2 targets into low band.
+        # Low-band species: no secretion (pure consumers of low-band).
         if s < 20:
-            # 50% chance of no secretion, otherwise exactly one target.
-            if rng.random() < 0.5:
-                secrete = np.empty(0, dtype=np.int16)
-            else:
-                secrete = rng.choice(secrete_band, size=1, replace=False).astype(np.int16)
-        else:
+            mid_and_low = np.concatenate([mid, low])
+            n_secrete = int(rng.integers(1, 4))  # 1, 2, or 3
+            secrete = rng.choice(
+                mid_and_low,
+                size=min(n_secrete, mid_and_low.size),
+                replace=False,
+            ).astype(np.int16)
+        elif s < 40:
             n_secrete = int(rng.integers(1, 3))
             n_secrete = min(n_secrete, max(1, secrete_band.size))
             secrete = rng.choice(
@@ -150,6 +154,8 @@ def _build_universe() -> _UniverseParams:
                 size=n_secrete,
                 replace=secrete_band.size < n_secrete,
             ).astype(np.int16)
+        else:
+            secrete = np.empty(0, dtype=np.int16)
 
         if secrete.size > 0:
             secrete = np.unique(secrete.astype(np.int16))
