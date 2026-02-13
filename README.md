@@ -66,6 +66,21 @@ High-eaters always secrete into mid and/or low; low-eaters do not secrete (pure 
 - **Low band**: 5 resources at 0–5.
 - **Toxin**: 0 (absent).
 
+### Metabolic switch (popular vs secondary uptake)
+
+Species have a **preference order** for which resource to consume when several are in their uptake set:
+
+- **Popular metabolite(s)** (`popular_uptake_list`): a small set of resources (e.g. 2 high-band resources in the universe) that **all species prefer first**. Defined once in the universe as `popular_primary` and passed into config as `popular_uptake_list` per species (intersected with each species’ `uptake_list`).
+- **Secondary uptake** (`secondary_uptake`): one **species-specific** backup resource index (or -1). When the popular metabolite is absent or exhausted at a cell, the species **switches** to consuming this secondary resource if available.
+
+Uptake logic in each tick (see `apply_uptake` in `metabolism.py`):
+
+1. If the species has a non-empty `popular_uptake_list`, it tries resources in order: **popular first**, then **secondary** (if set). It consumes only from that preference list.
+2. If **neither** popular nor secondary is available at the cell, the species does **not** fall back to other resources in `uptake_list`—it gains no energy from that attempt (strict metabolic switch).
+3. If `popular_uptake_list` is empty, the species uses its full `uptake_list` with no special ordering.
+
+So the **popular metabolite** is the shared, preferred nutrient; the **metabolic switch** is the behavior: “prefer popular → if unavailable, use secondary only; never use other uptake resources when popular/secondary are missing.” This makes injection of the popular metabolite (e.g. in a pulse) a strong, shared signal that drives growth before species fall back to their distinct secondaries.
+
 ### Cross-feeding and curated sets
 
 The chain high → mid → low gives cross-feeding: high-eaters feed mid-eaters via secretion; mid-eaters feed low-eaters. A curated 6-species set spanning the chain is available:
