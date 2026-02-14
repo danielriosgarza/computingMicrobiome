@@ -54,14 +54,14 @@ IBM_DILUTION_P = 0.5
 IBM_INJECT_SCALE = 2.0
 
 # Pulse parameters (only injection behavior differs).
-PULSE_RADIUS = 2
+PULSE_RADIUS = 0
 PULSE_TOXIN_CONC = 180
 PULSE_POPULAR_CONC = 200
 
 IBM_CFG = make_ibm_config_from_species(
     species_indices=[0, 1, 20, 21, 40, 41],
-    height=8,
-    width_grid=32,
+    height=16,
+    width_grid=16,
     overrides={
         "state_width_mode": "raw",
         "input_trace_depth": TRACE_DEPTH,
@@ -74,6 +74,12 @@ IBM_CFG = make_ibm_config_from_species(
         "pulse_radius": PULSE_RADIUS,
         "pulse_toxin_conc": PULSE_TOXIN_CONC,
         "pulse_popular_conc": PULSE_POPULAR_CONC,
+        "basal_init": False,
+        "left_source_enabled": True,
+        "left_source_species": [-1]*5 + [0, 1, 2, 3, 4, 5] + [-1]*5,
+        "left_source_colonize_empty": True,
+        "left_source_outcompete_margin": 1,
+
     },
 )
 # Keep channel mapping identical to task_4 for schedule/channel parity.

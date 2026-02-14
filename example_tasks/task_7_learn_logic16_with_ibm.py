@@ -1,7 +1,12 @@
-"""Task 7 - Learn the 4-bit opcode logic task with an IBM reservoir.
+"""Task 7 - Learn the 4-bit opcode logic task using an IBM pulse reservoir.
 
-Train a readout on all 64 opcode/operand combinations, report performance,
-and save both a histogram and a red/green correctness heatmap.
+Task behavior and reporting are matched to task_5_learn_logic16_rule_110.py:
+- same logic16 task setup and evaluation grid (16 opcodes x 4 operand pairs),
+- same timing and prediction settings (RECURRENCE/ITR/D_PERIOD/feature mode),
+- same output plots (opcode-accuracy histogram and opcode/operand heatmap).
+
+Reservoir differs by using IBM pulse injection with the same IBM species/toxin
+components used in task_4_learn_8_bit_with_ibm_pulse_matched.py.
 """
 
 from __future__ import annotations
@@ -11,7 +16,7 @@ import pathlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from computingMicrobiome.benchmarks.k_opcode_logic16_bm import N_CHANNELS, apply_opcode
+from computingMicrobiome.benchmarks.k_opcode_logic16_bm import apply_opcode
 from computingMicrobiome.ibm import (
     make_channel_to_resource_from_config,
     make_ibm_config_from_species,
@@ -38,39 +43,37 @@ OPS = {
     15: "TRUE",
 }
 
-# Parameters
+# Task-5 timing/task parameters (kept identical).
+RULE_NUMBER = 110
 BOUNDARY = "periodic"
-# Target recurrence used when lattice width allows it.
-RECURRENCE_TARGET = 8
+RECURRENCE = 8
 ITR = 8
-D_PERIOD = 25
+D_PERIOD = 200
 REPEATS = 1
 FEATURE_MODE = "cue_tick"
 OUTPUT_WINDOW = 2
 SEED_TRAIN = 0
+N_CHANNELS = 10
 
-# IBM reservoir dynamical parameters
-# Use small but non-zero diffusion and dilution so that metabolite
-# concentrations evolve, and a modest inject_scale so inputs actually
-# perturb the IBM state.
-IBM_DIFF_NUMER = 1
-IBM_DILUTION_P = 0.02
-IBM_INJECT_SCALE = 2.0
-IBM_ALLOW_INVASION = True
-IBM_INVASION_MARGIN = 0
+# Delay in simulation steps from input writes through cue tick.
+# logic16 stream length L = 6*REPEATS + D_PERIOD + 1.
+TRACE_DEPTH = (6 * REPEATS + D_PERIOD + 1) * (ITR + 1) + 8
 
 OUT_DIR = pathlib.Path(__file__).resolve().parent / "task_7_artifacts"
 OUT_DIR.mkdir(exist_ok=True)
 
-# For logic16, stream length is: repeats * 6 write packets + d_period + cue.
-LOGIC16_STREAM_LEN = (REPEATS * 6) + D_PERIOD + 1
-# Convert ticks to simulation-step trace depth used by IBM trace channels.
-TRACE_DEPTH = LOGIC16_STREAM_LEN * (ITR + 1) + 8
+# IBM components and pulse behavior (matched to task-4 pulse-matched setup).
+IBM_DIFF_NUMER = 1
+IBM_DILUTION_P = 0.5
+IBM_INJECT_SCALE = 2.0
+PULSE_RADIUS = 0
+PULSE_TOXIN_CONC = 180
+PULSE_POPULAR_CONC = 200
 
 IBM_CFG = make_ibm_config_from_species(
-    species_indices=[0, 1, 2, 4, 5, 6, 8, 9, 10, 11, 12],
-    height=8,
-    width_grid=8,
+    species_indices=[0, 1, 20, 21, 40, 41],
+    height=16,
+    width_grid=16,
     overrides={
         "state_width_mode": "raw",
         "input_trace_depth": TRACE_DEPTH,
@@ -79,22 +82,20 @@ IBM_CFG = make_ibm_config_from_species(
         "inject_scale": IBM_INJECT_SCALE,
         "dilution_p": IBM_DILUTION_P,
         "diff_numer": IBM_DIFF_NUMER,
-        "allow_invasion": IBM_ALLOW_INVASION,
-        "invasion_energy_margin": IBM_INVASION_MARGIN,
+        "inject_mode": "pulse_bit",
+        "pulse_radius": PULSE_RADIUS,
+        "pulse_toxin_conc": PULSE_TOXIN_CONC,
+        "pulse_popular_conc": PULSE_POPULAR_CONC,
+        "basal_init": False,
+        "left_source_enabled": True,
+        "left_source_species": [-1] * 5 + [0, 1, 2, 3, 4, 5] + [-1] * 5,
+        "left_source_colonize_empty": True,
+        "left_source_outcompete_margin": 1,
     },
 )
-# Map each input channel to a resource that exists in the reservoir
-# (compacted list from the selected species).
 IBM_CFG["channel_to_resource"] = make_channel_to_resource_from_config(
     IBM_CFG, N_CHANNELS
 )
-# Replace resource at injection sites (clear signal) instead of adding.
-IBM_CFG["inject_mode"] = "resource_replace"
-
-WIDTH = int(IBM_CFG["height"]) * int(IBM_CFG["width_grid"])
-# For create_input_locations(width, recurrence, input_channels), we need:
-# input_channels <= width // recurrence.
-RECURRENCE = min(RECURRENCE_TARGET, max(1, WIDTH // N_CHANNELS))
 
 
 def bits4(op: int) -> list[int]:
@@ -102,14 +103,15 @@ def bits4(op: int) -> list[int]:
 
 
 def main() -> None:
+    width = int(IBM_CFG["height"]) * int(IBM_CFG["width_grid"])
+
     print(
-        "Training IBM model for logic16 task "
-        f"(cells={WIDTH}, d_period={D_PERIOD}, trace_depth={TRACE_DEPTH}) ..."
+        "Training IBM pulse model for logic16 task "
+        f"(width={width}, d_period={D_PERIOD}) ..."
     )
     model = KOpcodeLogic16(
-        # Required by the generic API; ignored by IBM backend.
-        rule_number=110,
-        width=WIDTH,
+        rule_number=RULE_NUMBER,
+        width=width,
         boundary=BOUNDARY,
         recurrence=RECURRENCE,
         itr=ITR,
@@ -119,8 +121,7 @@ def main() -> None:
         output_window=OUTPUT_WINDOW,
         seed=SEED_TRAIN,
         readout_kind="svm",
-        readout_config={"C": 10.0, "class_weight": "balanced"},
-        reservoir_kind="ibm",
+        reservoir_kind="ibm_pulse",
         reservoir_config=IBM_CFG,
     ).fit()
     print("Training complete.\n")
@@ -182,7 +183,7 @@ def main() -> None:
     )
     ax_hist.set_xlabel("Per-opcode accuracy", fontsize=12)
     ax_hist.set_ylabel("Number of opcodes", fontsize=12)
-    ax_hist.set_title("Logic16 Task - IBM Reservoir + SVM", fontsize=13)
+    ax_hist.set_title("Logic16 Task - IBM pulse reservoir + SVM", fontsize=13)
     ax_hist.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
     ax_hist.set_xlim(-0.05, 1.05)
     ax_hist.axvline(
