@@ -1,7 +1,9 @@
-"""IBM reservoir backend with pulse injection (toxin / popular metabolite) and left source.
+"""IBM reservoir backend with pulse injection and left source.
 
-Mirrors the notebook Task 4 setup: CROSS_FEED_6_SPECIES, fixed left-edge migrating
-species, bit pulses at a single square (bit 0 = toxin, bit 1 = popular metabolite).
+Pulse injection: at each (channel, location) and every tick, instead of adding
+resources we clear the cell (empty occupancy, energy, resources), then add
+toxin if the channel value is 0 or popular metabolite if it is 1. Applies to
+all channels, all locations, all times (no fixed channel or tick limit).
 """
 
 from __future__ import annotations
@@ -38,9 +40,7 @@ class IBMReservoirBackendPulse(ReservoirBackend):
         self.n_resources = env.n_resources
         self._cells = self.height * self.width_grid
 
-        # Pulse parameters (notebook defaults)
-        self._center_r = int(cfg.get("pulse_center_r", self.height // 2))
-        self._center_c = int(cfg.get("pulse_center_c", self.width_grid // 2))
+        # Pulse parameters (same radius/conc at each site)
         self._radius = int(cfg.get("pulse_radius", 2))
         self._toxin_conc = int(cfg.get("pulse_toxin_conc", 180))
         self._popular_conc = int(cfg.get("pulse_popular_conc", 200))
@@ -77,7 +77,6 @@ class IBMReservoirBackendPulse(ReservoirBackend):
             width_grid=self.width_grid,
             n_resources=self.n_resources,
         )
-        self._inject_count = 0
 
     def _enforce_left_source_column(self) -> None:
         self._state.occ[:, 0] = self._left_source_species
@@ -138,7 +137,6 @@ class IBMReservoirBackendPulse(ReservoirBackend):
             state.occ[r, center] = r % max_band
         self._state = state
         self._enforce_left_source_column()
-        self._inject_count = 0
 
     def inject(
         self,
@@ -146,24 +144,33 @@ class IBMReservoirBackendPulse(ReservoirBackend):
         input_locations: np.ndarray,
         channel_idx: np.ndarray,
     ) -> None:
-        # Only apply pulse for the first 8 ticks (8-bit memory task input phase).
-        if self._inject_count >= 8:
+        """Pulse at every (location, channel): clear cell, then toxin (0) or popular (1)."""
+        if input_locations.size == 0 or input_values.size == 0:
             return
-        bit = 0
-        if input_values.size > 0:
-            bit = int(np.clip(input_values.reshape(-1)[0], 0, 1))
-        inject_bit_into_state(
-            self._state,
-            self.env,
-            self.species,
-            bit=bit,
-            center_r=self._center_r,
-            center_c=self._center_c,
-            radius=self._radius,
-            toxin_conc=self._toxin_conc,
-            popular_conc=self._popular_conc,
-        )
-        self._inject_count += 1
+        vals = np.asarray(input_values, dtype=np.float64).reshape(-1)
+        ch = np.asarray(channel_idx, dtype=np.int64).reshape(-1)
+        locs = np.asarray(input_locations, dtype=np.int64).reshape(-1)
+        n = locs.size
+        if ch.size != n:
+            return
+        for k in range(n):
+            cell_linear = int(np.mod(locs[k], self._cells))
+            r = cell_linear // self.width_grid
+            c = cell_linear % self.width_grid
+            channel = int(ch[k] % vals.size)
+            raw = float(vals[channel])
+            bit = 1 if raw > 0.5 else 0
+            inject_bit_into_state(
+                self._state,
+                self.env,
+                self.species,
+                bit=bit,
+                center_r=r,
+                center_c=c,
+                radius=self._radius,
+                toxin_conc=self._toxin_conc,
+                popular_conc=self._popular_conc,
+            )
 
     def step(self, rng: np.random.Generator) -> None:
         self._exclude_left_source_from_dynamics()
@@ -176,6 +183,10 @@ class IBMReservoirBackendPulse(ReservoirBackend):
         self._state.occ[:, 0] = -1
         self._state.E[self._state.occ < 0] = 0
         self._apply_left_source_migration()
+
+    def get_occupancy(self) -> np.ndarray:
+        """Current occupancy grid (height, width_grid); -1 = empty, else species index."""
+        return self._state.occ.copy()
 
     def get_state(self) -> np.ndarray:
         return encode_state(

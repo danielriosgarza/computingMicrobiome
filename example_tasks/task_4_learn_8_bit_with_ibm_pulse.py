@@ -1,9 +1,13 @@
 """Task 4 - 8-bit memory with IBM reservoir (pulse injection, notebook setup).
 
-Mirrors the notebook's Task 4: CROSS_FEED_6_SPECIES, 8x32 grid, left source column,
-and pulse injection (bit 0 = toxin, bit 1 = popular metabolite) for the first 8 ticks.
-Same workflow as task_4_learn_8_bit_with_ibm.py but uses reservoir_kind="ibm_pulse"
-so you can compare performance.
+Spatially and temporally the same as task_4_learn_8_bit_with_ibm.py: same
+input_locations (create_input_locations), same ticks/steps. The only difference
+is what happens at the injection site: instead of writing a resource via
+channel_to_resource, we apply a pulse (clear square, then toxin for bit 0 or
+popular metabolite for bit 1) at each channel-0 (bit) location.
+
+Uses CROSS_FEED_6_SPECIES, 8x32 grid, left source column. Same workflow as
+task_4_learn_8_bit_with_ibm.py but reservoir_kind="ibm_pulse" for comparison.
 """
 
 from __future__ import annotations
@@ -37,11 +41,11 @@ N_CHALLENGES = 100
 OUT_DIR = pathlib.Path(__file__).resolve().parent / "task_4_pulse_artifacts"
 OUT_DIR.mkdir(exist_ok=True)
 
-# Notebook Task 4 setup: cross-feed species, 8x32 grid, basal init, left source, pulse params
+# Same spatial/temporal schedule as task_4; pulse at each channel-0 site (notebook setup)
 IBM_PULSE_CFG = make_ibm_config_from_species(
-    species_indices=CROSS_FEED_6_SPECIES,
+    species_indices=[0, 1, 17, 20, 21, 40, 41],#CROSS_FEED_6_SPECIES,
     height=8,
-    width_grid=32,
+    width_grid=8,
     overrides={
         "basal_energy": 4,
         "dilution_p": 0.05,
@@ -53,8 +57,6 @@ IBM_PULSE_CFG = make_ibm_config_from_species(
         "left_source_colonize_empty": True,
     },
 )
-# Left source: one species per row cycling (default in backend)
-# Pulse center: (H//2, W//2) by default in backend
 
 
 def main() -> None:
