@@ -71,7 +71,7 @@ PULSE_TOXIN_CONC = 180
 PULSE_POPULAR_CONC = 200
 
 IBM_CFG = make_ibm_config_from_species(
-    species_indices=[0, 1, 20, 21, 40, 41],
+    species_indices=[0, 1, 20, 17, 21, 40, 41],
     height=16,
     width_grid=16,
     overrides={
@@ -88,7 +88,7 @@ IBM_CFG = make_ibm_config_from_species(
         "pulse_popular_conc": PULSE_POPULAR_CONC,
         "basal_init": False,
         "left_source_enabled": True,
-        "left_source_species": [-1] * 5 + [0, 1, 2, 3, 4, 5] + [-1] * 5,
+        "left_source_species": [-1] * 4 + [0, 1, 2, 3, 4, 5, 6] + [-1] * 5,
         "left_source_colonize_empty": True,
         "left_source_outcompete_margin": 1,
     },
