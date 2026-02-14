@@ -99,6 +99,28 @@ env, species = load_params(cfg)  # 6 species, minimal resource set including tox
 - **Energy capacity** defaults to 3× division cost (per species), so cells cannot accumulate unbounded energy.
 - Config keys: `energy_capacity` (scalar or per-species), `toxin_tolerance` (per-species when using toxin).
 
+### Injection modes (IBM backends)
+
+Both `reservoir_kind="ibm"` and `reservoir_kind="ibm_pulse"` use the same
+`inject_mode` names:
+
+- `resource_replace` (alias: `replace`): set the targeted resource value at each
+  injection site to the scaled input value.
+- `resource_add` (alias: `add`): add the scaled input value to the targeted
+  resource at each injection site.
+- `pulse_bit` (alias: `pulse`): clear a square neighborhood, then write toxin
+  for bit 0 or popular metabolite for bit 1.
+
+Defaults:
+
+- `ibm` defaults to `resource_replace`.
+- `ibm_pulse` defaults to `pulse_bit`.
+
+Backend behavior note:
+
+- `ibm_pulse` now reuses the same reset/state-width/trace behavior as `ibm`;
+  only the default `inject_mode` differs.
+
 ## CLI entry points
 
 After installation:

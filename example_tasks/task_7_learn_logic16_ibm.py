@@ -89,7 +89,7 @@ IBM_CFG["channel_to_resource"] = make_channel_to_resource_from_config(
     IBM_CFG, N_CHANNELS
 )
 # Replace resource at injection sites (clear signal) instead of adding.
-IBM_CFG["inject_mode"] = "replace"
+IBM_CFG["inject_mode"] = "resource_replace"
 
 WIDTH = int(IBM_CFG["height"]) * int(IBM_CFG["width_grid"])
 # For create_input_locations(width, recurrence, input_channels), we need:

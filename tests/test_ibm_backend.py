@@ -11,6 +11,7 @@ from computingMicrobiome.ibm.reproduction import apply_reproduction
 from computingMicrobiome.ibm.state import GridState, make_zero_state
 from computingMicrobiome.reservoirs.factory import make_reservoir
 from computingMicrobiome.reservoirs.ibm_backend import IBMReservoirBackend
+from computingMicrobiome.reservoirs.ibm_pulse_backend import IBMReservoirBackendPulse
 from computingMicrobiome.utils import create_input_locations
 
 
@@ -72,6 +73,169 @@ def test_ibm_bounds() -> None:
     assert int(st.E.max()) <= backend.env.Emax
     assert int(st.R.min()) >= 0
     assert int(st.R.max()) <= backend.env.Rmax
+
+
+def test_ibm_pulse_backend_matches_ibm_when_config_is_same() -> None:
+    cfg = {
+        "height": 3,
+        "width_grid": 4,
+        "n_species": 2,
+        "n_resources": 2,
+        "state_width_mode": "raw",
+        "input_trace_depth": 2,
+        "input_trace_channels": 2,
+        "input_trace_decay": 1.0,
+        "inject_mode": "resource_replace",
+        "inject_scale": 3.0,
+        "diff_numer": 1,
+        "diff_denom": 5,
+        "dilution_p": 0.2,
+    }
+
+    b_ibm = IBMReservoirBackend(config=cfg)
+    b_pulse = IBMReservoirBackendPulse(config=cfg)
+
+    rng_reset_a = np.random.default_rng(7)
+    rng_reset_b = np.random.default_rng(7)
+    b_ibm.reset(rng_reset_a, x0_mode="random")
+    b_pulse.reset(rng_reset_b, x0_mode="random")
+    np.testing.assert_array_equal(b_ibm.get_state(), b_pulse.get_state())
+
+    locs = np.array([0, 3, 5, 9], dtype=int)
+    ch = np.array([0, 1, 0, 1], dtype=int)
+    inj_rng = np.random.default_rng(11)
+    step_rng_a = np.random.default_rng(19)
+    step_rng_b = np.random.default_rng(19)
+
+    for _ in range(6):
+        inputs = inj_rng.integers(0, 2, size=2, dtype=np.int8)
+        b_ibm.inject(inputs, locs, ch)
+        b_pulse.inject(inputs, locs, ch)
+        np.testing.assert_array_equal(b_ibm.get_state(), b_pulse.get_state())
+        b_ibm.step(step_rng_a)
+        b_pulse.step(step_rng_b)
+        np.testing.assert_array_equal(b_ibm.get_state(), b_pulse.get_state())
+
+
+def test_ibm_inject_mode_aliases_match_canonical() -> None:
+    base = {
+        "height": 1,
+        "width_grid": 1,
+        "n_species": 1,
+        "n_resources": 1,
+        "diff_numer": 0,
+        "dilution_p": 0.0,
+        "inject_scale": 3.0,
+        "maint_cost": [0],
+        "uptake_rate": [0],
+        "yield_energy": [0],
+        "div_threshold": [255],
+        "div_cost": [0],
+        "birth_energy": [0],
+    }
+
+    cases = [("replace", "resource_replace"), ("add", "resource_add")]
+    loc = np.array([0], dtype=int)
+    ch = np.array([0], dtype=int)
+    inp = np.array([1], dtype=np.int8)
+
+    for alias, canonical in cases:
+        b_alias = IBMReservoirBackend(config=dict(base, inject_mode=alias))
+        b_canon = IBMReservoirBackend(config=dict(base, inject_mode=canonical))
+        rng = np.random.default_rng(0)
+        b_alias.reset(rng, x0_mode="zeros")
+        b_canon.reset(np.random.default_rng(0), x0_mode="zeros")
+        b_alias._state.R[0, 0, 0] = 5
+        b_canon._state.R[0, 0, 0] = 5
+        b_alias.inject(inp, loc, ch)
+        b_canon.inject(inp, loc, ch)
+        np.testing.assert_array_equal(b_alias._state.R, b_canon._state.R)
+
+
+def test_ibm_pulse_mode_available_in_ibm_backend() -> None:
+    backend = IBMReservoirBackend(
+        config={
+            "height": 1,
+            "width_grid": 1,
+            "n_species": 1,
+            "n_resources": 2,
+            "inject_mode": "pulse_bit",
+            "pulse_radius": 0,
+            "pulse_toxin_conc": 77,
+            "pulse_popular_conc": 99,
+            "toxin_resource_index": 1,
+            "uptake_list": [[0, 1]],
+            "popular_uptake_list": [0],
+            "maint_cost": [0],
+            "uptake_rate": [0],
+            "yield_energy": [0],
+            "div_threshold": [255],
+            "div_cost": [0],
+            "birth_energy": [0],
+            "dilution_p": 0.0,
+            "diff_numer": 0,
+        }
+    )
+    rng = np.random.default_rng(0)
+    backend.reset(rng, x0_mode="zeros")
+
+    backend._state.occ[0, 0] = 0
+    backend._state.E[0, 0] = 10
+    backend._state.R[:, 0, 0] = 5
+    backend.inject(
+        input_values=np.array([0], dtype=np.int8),
+        input_locations=np.array([0], dtype=int),
+        channel_idx=np.array([0], dtype=int),
+    )
+    assert int(backend._state.occ[0, 0]) == -1
+    assert int(backend._state.E[0, 0]) == 0
+    assert int(backend._state.R[0, 0, 0]) == 0
+    assert int(backend._state.R[1, 0, 0]) == 77
+
+    backend._state.occ[0, 0] = 0
+    backend._state.E[0, 0] = 10
+    backend._state.R[:, 0, 0] = 5
+    backend.inject(
+        input_values=np.array([1], dtype=np.int8),
+        input_locations=np.array([0], dtype=int),
+        channel_idx=np.array([0], dtype=int),
+    )
+    assert int(backend._state.occ[0, 0]) == -1
+    assert int(backend._state.E[0, 0]) == 0
+    assert int(backend._state.R[0, 0, 0]) == 99
+    assert int(backend._state.R[1, 0, 0]) == 0
+
+
+def test_ibm_pulse_backend_supports_resource_injection_mode() -> None:
+    backend = IBMReservoirBackendPulse(
+        config={
+            "height": 1,
+            "width_grid": 1,
+            "n_species": 1,
+            "n_resources": 2,
+            "inject_mode": "resource_replace",
+            "inject_scale": 4.0,
+            "channel_to_resource": [1],
+            "maint_cost": [0],
+            "uptake_rate": [0],
+            "yield_energy": [0],
+            "div_threshold": [255],
+            "div_cost": [0],
+            "birth_energy": [0],
+            "dilution_p": 0.0,
+            "diff_numer": 0,
+        }
+    )
+    rng = np.random.default_rng(0)
+    backend.reset(rng, x0_mode="zeros")
+    backend._state.R.fill(0)
+    backend.inject(
+        input_values=np.array([1], dtype=np.int8),
+        input_locations=np.array([0], dtype=int),
+        channel_idx=np.array([0], dtype=int),
+    )
+    assert int(backend._state.R[1, 0, 0]) == 4
+    assert int(backend._state.R[0, 0, 0]) == 0
 
 
 def test_ibm_diffusion_conserves() -> None:

@@ -67,7 +67,7 @@ IBM_CFG = make_ibm_config_from_species(
 IBM_CFG["channel_to_resource"] = make_channel_to_resource_from_config(
     IBM_CFG, N_CHANNELS
 )
-IBM_CFG["inject_mode"] = "replace"
+IBM_CFG["inject_mode"] = "resource_replace"
 
 
 def main() -> None:

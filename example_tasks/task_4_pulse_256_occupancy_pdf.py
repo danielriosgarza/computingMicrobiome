@@ -40,6 +40,8 @@ IBM_PULSE_CFG = make_ibm_config_from_species(
         "pulse_radius": 2,
         "pulse_toxin_conc": 180,
         "pulse_popular_conc": 200,
+        "inject_mode": "pulse_bit",
+        "left_source_enabled": True,
         "left_source_outcompete_margin": 1,
         "left_source_colonize_empty": True,
     },

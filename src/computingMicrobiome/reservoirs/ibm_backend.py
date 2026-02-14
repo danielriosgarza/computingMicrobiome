@@ -9,8 +9,10 @@ import numpy as np
 from ..ibm.diffusion import diffuse_resources
 from ..ibm.dilution import apply_dilution
 from ..ibm.encoding import encode_state
+from ..ibm.injection import PULSE_BIT, RESOURCE_ADD, RESOURCE_REPLACE, normalize_inject_mode
 from ..ibm.metabolism import apply_maintenance, apply_uptake
 from ..ibm.params import EnvParams, SpeciesParams, load_params
+from ..ibm.pulse_injection import inject_bit_into_state
 from ..ibm.reproduction import apply_reproduction
 from ..ibm.state import GridState, make_zero_state
 from ..ibm.stepper import tick
@@ -53,9 +55,15 @@ class IBMReservoirBackend:
             raise ValueError("input_trace_depth requires state_width_mode='raw'")
         self._trace_width = self._trace_depth * self._trace_channels
 
-        self._inject_mode = str(cfg.get("inject_mode", "replace")).strip().lower()
-        if self._inject_mode not in ("add", "replace"):
-            raise ValueError("inject_mode must be 'add' or 'replace'")
+        self._inject_mode = normalize_inject_mode(
+            cfg.get("inject_mode"),
+            default=RESOURCE_REPLACE,
+        )
+        self._pulse_radius = int(cfg.get("pulse_radius", 2))
+        self._pulse_toxin_conc = int(cfg.get("pulse_toxin_conc", 180))
+        self._pulse_popular_conc = int(cfg.get("pulse_popular_conc", 200))
+        if self._pulse_radius < 0:
+            raise ValueError("pulse_radius must be >= 0")
 
         self._left_source_enabled = bool(cfg.get("left_source_enabled", False))
         self._left_source_colonize_empty = bool(
@@ -296,12 +304,34 @@ class IBMReservoirBackend:
         if input_locations.size == 0 or input_values.size == 0:
             return
 
-        loc = np.mod(input_locations.astype(np.int64, copy=False), self._cells)
+        loc = np.mod(input_locations.astype(np.int64, copy=False).reshape(-1), self._cells)
         rr = (loc // self.width_grid).astype(np.int64, copy=False)
         cc = (loc % self.width_grid).astype(np.int64, copy=False)
 
-        ch = channel_idx.astype(np.int64, copy=False)
+        ch = channel_idx.astype(np.int64, copy=False).reshape(-1)
+        if ch.size != loc.size:
+            return
+
         vals = input_values.reshape(-1)
+        if self._inject_mode == PULSE_BIT:
+            vals_f = vals.astype(np.float64, copy=False)
+            for k in range(loc.size):
+                channel = int(ch[k] % vals_f.size)
+                raw = float(vals_f[channel])
+                bit = 1 if raw > 0.5 else 0
+                inject_bit_into_state(
+                    self._state,
+                    self.env,
+                    self.species,
+                    bit=bit,
+                    center_r=int(rr[k]),
+                    center_c=int(cc[k]),
+                    radius=self._pulse_radius,
+                    toxin_conc=self._pulse_toxin_conc,
+                    popular_conc=self._pulse_popular_conc,
+                )
+            return
+
         scaled = np.rint(vals[ch % vals.size].astype(np.float32) * self.env.inject_scale)
         add = np.maximum(scaled, 0.0).astype(np.int32)
 
@@ -312,12 +342,14 @@ class IBMReservoirBackend:
             m_idx = mapping[ch % mapping.size].astype(np.int64, copy=False)
 
         R_work = self._state.R.astype(np.int32, copy=True)
-        if self._inject_mode == "replace":
+        if self._inject_mode == RESOURCE_REPLACE:
             # Set resource at injection sites to the injected value so the
             # input signal is clearly visible (no adding on top of basal).
             R_work[m_idx, rr, cc] = add
-        else:
+        elif self._inject_mode == RESOURCE_ADD:
             np.add.at(R_work, (m_idx, rr, cc), add)
+        else:
+            raise RuntimeError(f"Unsupported inject_mode: {self._inject_mode}")
         self._state.R = np.clip(R_work, 0, self.env.Rmax).astype(np.uint8)
 
     def step(self, rng: np.random.Generator) -> None:
