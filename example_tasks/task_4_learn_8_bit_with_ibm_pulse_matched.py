@@ -50,7 +50,7 @@ N_CHANNELS = 4
 
 # IBM reservoir dynamics (kept matched to task_4_learn_8_bit_with_ibm.py).
 IBM_DIFF_NUMER = 1
-IBM_DILUTION_P = 0.02
+IBM_DILUTION_P = 0.5
 IBM_INJECT_SCALE = 2.0
 
 # Pulse parameters (only injection behavior differs).
@@ -59,9 +59,9 @@ PULSE_TOXIN_CONC = 180
 PULSE_POPULAR_CONC = 200
 
 IBM_CFG = make_ibm_config_from_species(
-    species_indices=[0, 1, 2],
+    species_indices=[0, 1, 20, 21, 40, 41],
     height=8,
-    width_grid=8,
+    width_grid=32,
     overrides={
         "state_width_mode": "raw",
         "input_trace_depth": TRACE_DEPTH,
