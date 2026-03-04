@@ -109,6 +109,7 @@ def build_tagged_stream(
     d_period: int,
     repeats: int = 1,
     order: Optional[Sequence[str]] = None,
+    post_cue_ticks: int = 0,
 ) -> np.ndarray:
     """Build the tagged input stream for a single episode.
 
@@ -120,6 +121,7 @@ def build_tagged_stream(
         repeats: Number of times to repeat the write packets.
         order: Optional sequence of field names among {"op0", "op1", "op2", "op3", "a", "b"}.
             If None, uses ["op0", "op1", "op2", "op3", "a", "b"].
+        post_cue_ticks: Number of extra non-cue ticks appended after the cue.
 
     Returns:
         np.ndarray: Stream of shape (L, 10).
@@ -130,6 +132,9 @@ def build_tagged_stream(
 
     if order is None:
         order = ["op0", "op1", "op2", "op3", "a", "b"]
+    post_cue_ticks = int(post_cue_ticks)
+    if post_cue_ticks < 0:
+        raise ValueError("post_cue_ticks must be >= 0")
 
     field_to_tag_and_value = {
         "op0": (TAG_OP0, int(op_bits_msb_first[3])),
@@ -155,13 +160,17 @@ def build_tagged_stream(
     cue = np.zeros((1, N_CHANNELS), dtype=np.int8)
     cue[0, CUE] = 1
 
-    stream = np.vstack([np.vstack(write_packets), distractor, cue])
+    # Optional post-cue ticks: no tags/values, no cue.
+    post_cue = np.zeros((post_cue_ticks, N_CHANNELS), dtype=np.int8)
+
+    stream = np.vstack([np.vstack(write_packets), distractor, cue, post_cue])
 
     # Set DIST=1 by default on all non-cue ticks unless during write packets you prefer otherwise.
     # Here we keep DIST=1 during write packets too (often improves separability),
     # but it is harmless because tags + values still exist.
-    stream[:-1, DIST] = 1
-    stream[-1, DIST] = 0
+    stream[:, DIST] = 1
+    cue_idx = len(write_packets) + int(d_period)
+    stream[cue_idx, DIST] = 0
 
     return stream
 
@@ -179,6 +188,7 @@ def run_episode_record_tagged(
     input_locations: np.ndarray,
     repeats: int = 1,
     order: Optional[Sequence[str]] = None,
+    post_cue_ticks: int = 0,
     reg: Optional[Readout] = None,
     collect_states: bool = True,
     x0_mode: str = "zeros",
@@ -202,6 +212,7 @@ def run_episode_record_tagged(
         input_locations: Injection locations array.
         repeats: Number of times to repeat the write packets.
         order: Optional packet field ordering.
+        post_cue_ticks: Number of extra non-cue ticks appended after cue.
         reg: Optional trained readout model for predictions.
         collect_states: Whether to store the full state history.
         x0_mode: Initial state mode ("zeros" or "random").
@@ -218,6 +229,7 @@ def run_episode_record_tagged(
         d_period=d_period,
         repeats=repeats,
         order=order,
+        post_cue_ticks=post_cue_ticks,
     )
 
     reservoir = make_reservoir(
@@ -247,6 +259,8 @@ def run_episode_record_tagged(
     elif feature_mode == "output_window":
         if output_window < 1:
             raise ValueError("output_window must be >= 1")
+        if output_window > ep["X_tick"].shape[0]:
+            raise ValueError("output_window cannot exceed number of episode ticks")
         X_episode = ep["X_tick"][-output_window:]  # shape (W, itr*width)
     else:
         raise ValueError("feature_mode must be 'cue_tick' or 'output_window'")
@@ -275,6 +289,7 @@ def build_dataset_programmed_logic(
     repeats: int = 1,
     feature_mode: str = "cue_tick",
     output_window: int = 2,
+    post_cue_ticks: int = 0,
     seed: int = 0,
     order: Optional[Sequence[str]] = None,
     reservoir_kind: str = "eca",
@@ -292,6 +307,7 @@ def build_dataset_programmed_logic(
         repeats: Number of times to repeat write packets.
         feature_mode: "cue_tick" or "output_window".
         output_window: Window length when feature_mode is "output_window".
+        post_cue_ticks: Number of extra non-cue ticks appended after cue.
         seed: RNG seed for dataset generation.
         order: Optional packet field ordering.
 
@@ -325,6 +341,7 @@ def build_dataset_programmed_logic(
                     input_locations=input_locations,
                     repeats=repeats,
                     order=order,
+                    post_cue_ticks=post_cue_ticks,
                     reg=None,
                     collect_states=False,
                     x0_mode="zeros",
@@ -355,6 +372,7 @@ def train_programmed_logic_readout(
     repeats: int = 1,
     feature_mode: str = "cue_tick",
     output_window: int = 2,
+    post_cue_ticks: int = 0,
     seed_train: int = 0,
     order: Optional[Sequence[str]] = None,
     readout_kind: str = "svm",
@@ -374,6 +392,7 @@ def train_programmed_logic_readout(
         repeats: Number of times to repeat write packets.
         feature_mode: "cue_tick" or "output_window".
         output_window: Window length when feature_mode is "output_window".
+        post_cue_ticks: Number of extra non-cue ticks appended after cue.
         seed_train: RNG seed for training data.
         order: Optional packet field ordering.
         readout_kind: "svm" or "evo".
@@ -392,6 +411,7 @@ def train_programmed_logic_readout(
         repeats=repeats,
         feature_mode=feature_mode,
         output_window=output_window,
+        post_cue_ticks=post_cue_ticks,
         seed=seed_train,
         order=order,
         reservoir_kind=reservoir_kind,

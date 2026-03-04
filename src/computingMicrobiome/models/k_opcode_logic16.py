@@ -27,8 +27,9 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
         itr: Number of iterations between ticks.
         d_period: Delay between input and output window.
         repeats: Number of episode repeats per sample.
-        feature_mode: Feature extraction mode ("cue_tick" or "window").
+        feature_mode: Feature extraction mode ("cue_tick" or "output_window").
         output_window: Output window length when using windowed features.
+        post_cue_ticks: Number of extra non-cue ticks appended after cue.
         seed: RNG seed for dataset generation and sampling.
         readout_kind: "svm" or "evo".
         readout_config: Optional configuration for the readout.
@@ -45,6 +46,7 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
         repeats: int = 1,
         feature_mode: str = "cue_tick",
         output_window: int = 2,
+        post_cue_ticks: int = 0,
         seed: int = 0,
         readout_kind: str = "svm",
         readout_config: dict | None = None,
@@ -60,6 +62,7 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
         self.repeats = int(repeats)
         self.feature_mode = str(feature_mode)
         self.output_window = int(output_window)
+        self.post_cue_ticks = int(post_cue_ticks)
         self.seed = int(seed)
         self.readout_kind = str(readout_kind)
         self.readout_config = readout_config
@@ -89,6 +92,7 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
             repeats=self.repeats,
             feature_mode=self.feature_mode,
             output_window=self.output_window,
+            post_cue_ticks=self.post_cue_ticks,
             seed_train=self.seed,
             order=None,
             readout_kind=self.readout_kind,
@@ -142,6 +146,7 @@ class KOpcodeLogic16(BaseEstimator, ClassifierMixin):
                 input_locations=self.input_locations_,
                 repeats=self.repeats,
                 order=None,
+                post_cue_ticks=self.post_cue_ticks,
                 reg=None,
                 collect_states=False,
                 x0_mode="zeros",

@@ -5,8 +5,8 @@ Task behavior and reporting are matched to task_5_learn_logic16_rule_110.py:
 - same timing and prediction settings (RECURRENCE/ITR/D_PERIOD/feature mode),
 - same output plots (opcode-accuracy histogram and opcode/operand heatmap).
 
-Reservoir differs by using IBM pulse injection with the same IBM species/toxin
-components used in task_4_learn_8_bit_with_ibm_pulse_matched.py.
+Reservoir differs by using IBM pulse injection with a tuned IBM species/toxin
+configuration chosen from the Task-7 visualization sweep.
 """
 
 from __future__ import annotations
@@ -43,35 +43,36 @@ OPS = {
     15: "TRUE",
 }
 
-# Task-5 timing/task parameters (kept identical).
+# Task-5 timing/task parameters with explicit post-cue readout tail.
 RULE_NUMBER = 110
 BOUNDARY = "periodic"
 RECURRENCE = 8
 ITR = 8
 D_PERIOD = 200
 REPEATS = 1
-FEATURE_MODE = "cue_tick"
-OUTPUT_WINDOW = 2
+POST_CUE_TICKS = 3
+FEATURE_MODE = "output_window"
+OUTPUT_WINDOW = 3
 SEED_TRAIN = 0
 N_CHANNELS = 10
 
 # Delay in simulation steps from input writes through cue tick.
-# logic16 stream length L = 6*REPEATS + D_PERIOD + 1.
-TRACE_DEPTH = (6 * REPEATS + D_PERIOD + 1) * (ITR + 1) + 8
+# logic16 stream length L = 6*REPEATS + D_PERIOD + 1 + POST_CUE_TICKS.
+TRACE_DEPTH = (6 * REPEATS + D_PERIOD + 1 + POST_CUE_TICKS) * (ITR + 1) + 8
 
 OUT_DIR = pathlib.Path(__file__).resolve().parent / "task_7_artifacts"
 OUT_DIR.mkdir(exist_ok=True)
 
-# IBM components and pulse behavior (matched to task-4 pulse-matched setup).
+# IBM components and pulse behavior (tuned Task-7 setting).
 IBM_DIFF_NUMER = 1
-IBM_DILUTION_P = 0.5
+IBM_DILUTION_P = 0.1
 IBM_INJECT_SCALE = 2.0
 PULSE_RADIUS = 0
-PULSE_TOXIN_CONC = 180
-PULSE_POPULAR_CONC = 200
+PULSE_TOXIN_CONC = 100
+PULSE_POPULAR_CONC = 100
 
 IBM_CFG = make_ibm_config_from_species(
-    species_indices=[0, 1, 20, 17, 21, 40, 41],
+    species_indices=[0, 1, 20, 21, 22, 40, 41, 47],
     height=16,
     width_grid=16,
     overrides={
@@ -88,9 +89,10 @@ IBM_CFG = make_ibm_config_from_species(
         "pulse_popular_conc": PULSE_POPULAR_CONC,
         "basal_init": False,
         "left_source_enabled": True,
-        "left_source_species": [-1] * 4 + [0, 1, 2, 3, 4, 5, 6] + [-1] * 5,
+         "left_source_species": [-1] * 3 + [0, 1, 2, 3, 4, 5,6, 7] + [-1] * 5,
         "left_source_colonize_empty": True,
         "left_source_outcompete_margin": 1,
+        "toxin_tolerance": [10, 5, 5, 25, 25, 100, 100, 100]
     },
 )
 IBM_CFG["channel_to_resource"] = make_channel_to_resource_from_config(
@@ -119,6 +121,7 @@ def main() -> None:
         repeats=REPEATS,
         feature_mode=FEATURE_MODE,
         output_window=OUTPUT_WINDOW,
+        post_cue_ticks=POST_CUE_TICKS,
         seed=SEED_TRAIN,
         readout_kind="svm",
         reservoir_kind="ibm_pulse",
