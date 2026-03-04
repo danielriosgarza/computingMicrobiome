@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.4">
     
     
       
@@ -7160,7 +7160,7 @@ alu.predict([[0, 0, 0, 1, 1]]).tolist()
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Feature extraction mode ("cue_tick" or "window").</p>
+                <p>Feature extraction mode ("cue_tick" or "output_window").</p>
               </div>
             </td>
             <td>
@@ -7181,6 +7181,22 @@ alu.predict([[0, 0, 0, 1, 1]]).tolist()
             </td>
             <td>
                   <code>2</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>post_cue_ticks</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of extra non-cue ticks appended after cue.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -12100,7 +12116,7 @@ positions are sampled without replacement in each segment.</p>
 
 
 <h2 id="computingMicrobiome.benchmarks.k_opcode_logic16_bm.build_dataset_programmed_logic" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">build_dataset_programmed_logic</span><span class="p">(</span><span class="n">rule_number</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">boundary</span><span class="p">,</span> <span class="n">recurrence</span><span class="p">,</span> <span class="n">itr</span><span class="p">,</span> <span class="n">d_period</span><span class="p">,</span> <span class="n">repeats</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">feature_mode</span><span class="o">=</span><span class="s1">&#39;cue_tick&#39;</span><span class="p">,</span> <span class="n">output_window</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reservoir_kind</span><span class="o">=</span><span class="s1">&#39;eca&#39;</span><span class="p">,</span> <span class="n">reservoir_config</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">build_dataset_programmed_logic</span><span class="p">(</span><span class="n">rule_number</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">boundary</span><span class="p">,</span> <span class="n">recurrence</span><span class="p">,</span> <span class="n">itr</span><span class="p">,</span> <span class="n">d_period</span><span class="p">,</span> <span class="n">repeats</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">feature_mode</span><span class="o">=</span><span class="s1">&#39;cue_tick&#39;</span><span class="p">,</span> <span class="n">output_window</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">post_cue_ticks</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reservoir_kind</span><span class="o">=</span><span class="s1">&#39;eca&#39;</span><span class="p">,</span> <span class="n">reservoir_config</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h2>
 
@@ -12267,6 +12283,22 @@ positions are sampled without replacement in each segment.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
+                <code>post_cue_ticks</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of extra non-cue ticks appended after cue.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
                 <code>seed</code>
             </td>
             <td>
@@ -12342,7 +12374,7 @@ positions are sampled without replacement in each segment.</p>
 
 
 <h2 id="computingMicrobiome.benchmarks.k_opcode_logic16_bm.build_tagged_stream" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">build_tagged_stream</span><span class="p">(</span><span class="n">op_bits_msb_first</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">d_period</span><span class="p">,</span> <span class="n">repeats</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">build_tagged_stream</span><span class="p">(</span><span class="n">op_bits_msb_first</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">d_period</span><span class="p">,</span> <span class="n">repeats</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">post_cue_ticks</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></code>
 
 </h2>
 
@@ -12458,6 +12490,22 @@ If None, uses ["op0", "op1", "op2", "op3", "a", "b"].</p>
             </td>
             <td>
                   <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>post_cue_ticks</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of extra non-cue ticks appended after the cue.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
             </td>
           </tr>
       </tbody>
@@ -12813,7 +12861,7 @@ positions are sampled without replacement in each segment.</p>
 
 
 <h2 id="computingMicrobiome.benchmarks.k_opcode_logic16_bm.run_episode_record_tagged" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">run_episode_record_tagged</span><span class="p">(</span><span class="n">op_bits_msb_first</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">rule_number</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">boundary</span><span class="p">,</span> <span class="n">itr</span><span class="p">,</span> <span class="n">d_period</span><span class="p">,</span> <span class="n">rng</span><span class="p">,</span> <span class="n">input_locations</span><span class="p">,</span> <span class="n">repeats</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reg</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">collect_states</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">x0_mode</span><span class="o">=</span><span class="s1">&#39;zeros&#39;</span><span class="p">,</span> <span class="n">feature_mode</span><span class="o">=</span><span class="s1">&#39;cue_tick&#39;</span><span class="p">,</span> <span class="n">output_window</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">reservoir_kind</span><span class="o">=</span><span class="s1">&#39;eca&#39;</span><span class="p">,</span> <span class="n">reservoir_config</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">run_episode_record_tagged</span><span class="p">(</span><span class="n">op_bits_msb_first</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">rule_number</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">boundary</span><span class="p">,</span> <span class="n">itr</span><span class="p">,</span> <span class="n">d_period</span><span class="p">,</span> <span class="n">rng</span><span class="p">,</span> <span class="n">input_locations</span><span class="p">,</span> <span class="n">repeats</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">post_cue_ticks</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">reg</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">collect_states</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">x0_mode</span><span class="o">=</span><span class="s1">&#39;zeros&#39;</span><span class="p">,</span> <span class="n">feature_mode</span><span class="o">=</span><span class="s1">&#39;cue_tick&#39;</span><span class="p">,</span> <span class="n">output_window</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">reservoir_kind</span><span class="o">=</span><span class="s1">&#39;eca&#39;</span><span class="p">,</span> <span class="n">reservoir_config</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h2>
 
@@ -13028,6 +13076,22 @@ positions are sampled without replacement in each segment.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
+                <code>post_cue_ticks</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of extra non-cue ticks appended after cue.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
                 <code>reg</code>
             </td>
             <td>
@@ -13159,7 +13223,7 @@ positions are sampled without replacement in each segment.</p>
 
 
 <h2 id="computingMicrobiome.benchmarks.k_opcode_logic16_bm.train_programmed_logic_readout" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">train_programmed_logic_readout</span><span class="p">(</span><span class="n">rule_number</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">boundary</span><span class="p">,</span> <span class="n">recurrence</span><span class="p">,</span> <span class="n">itr</span><span class="p">,</span> <span class="n">d_period</span><span class="p">,</span> <span class="n">repeats</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">feature_mode</span><span class="o">=</span><span class="s1">&#39;cue_tick&#39;</span><span class="p">,</span> <span class="n">output_window</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">seed_train</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">readout_kind</span><span class="o">=</span><span class="s1">&#39;svm&#39;</span><span class="p">,</span> <span class="n">readout_config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reservoir_kind</span><span class="o">=</span><span class="s1">&#39;eca&#39;</span><span class="p">,</span> <span class="n">reservoir_config</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">train_programmed_logic_readout</span><span class="p">(</span><span class="n">rule_number</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">boundary</span><span class="p">,</span> <span class="n">recurrence</span><span class="p">,</span> <span class="n">itr</span><span class="p">,</span> <span class="n">d_period</span><span class="p">,</span> <span class="n">repeats</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">feature_mode</span><span class="o">=</span><span class="s1">&#39;cue_tick&#39;</span><span class="p">,</span> <span class="n">output_window</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">post_cue_ticks</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">seed_train</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">readout_kind</span><span class="o">=</span><span class="s1">&#39;svm&#39;</span><span class="p">,</span> <span class="n">readout_config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reservoir_kind</span><span class="o">=</span><span class="s1">&#39;eca&#39;</span><span class="p">,</span> <span class="n">reservoir_config</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h2>
 
@@ -13322,6 +13386,22 @@ positions are sampled without replacement in each segment.</p>
             </td>
             <td>
                   <code>2</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>post_cue_ticks</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of extra non-cue ticks appended after cue.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -18355,7 +18435,7 @@ positions are sampled without replacement in each segment.</p>
 
 
 <h2 id="computingMicrobiome.tasks.toy_addition.run_episode_record_tagged" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">run_episode_record_tagged</span><span class="p">(</span><span class="n">op_bits_msb_first</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">rule_number</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">boundary</span><span class="p">,</span> <span class="n">itr</span><span class="p">,</span> <span class="n">d_period</span><span class="p">,</span> <span class="n">rng</span><span class="p">,</span> <span class="n">input_locations</span><span class="p">,</span> <span class="n">repeats</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reg</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">collect_states</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">x0_mode</span><span class="o">=</span><span class="s1">&#39;zeros&#39;</span><span class="p">,</span> <span class="n">feature_mode</span><span class="o">=</span><span class="s1">&#39;cue_tick&#39;</span><span class="p">,</span> <span class="n">output_window</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">reservoir_kind</span><span class="o">=</span><span class="s1">&#39;eca&#39;</span><span class="p">,</span> <span class="n">reservoir_config</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">run_episode_record_tagged</span><span class="p">(</span><span class="n">op_bits_msb_first</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">rule_number</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">boundary</span><span class="p">,</span> <span class="n">itr</span><span class="p">,</span> <span class="n">d_period</span><span class="p">,</span> <span class="n">rng</span><span class="p">,</span> <span class="n">input_locations</span><span class="p">,</span> <span class="n">repeats</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">post_cue_ticks</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">reg</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">collect_states</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">x0_mode</span><span class="o">=</span><span class="s1">&#39;zeros&#39;</span><span class="p">,</span> <span class="n">feature_mode</span><span class="o">=</span><span class="s1">&#39;cue_tick&#39;</span><span class="p">,</span> <span class="n">output_window</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">reservoir_kind</span><span class="o">=</span><span class="s1">&#39;eca&#39;</span><span class="p">,</span> <span class="n">reservoir_config</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h2>
 
@@ -18566,6 +18646,22 @@ positions are sampled without replacement in each segment.</p>
             </td>
             <td>
                   <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>post_cue_ticks</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of extra non-cue ticks appended after cue.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
             </td>
           </tr>
           <tr class="doc-section-item">
